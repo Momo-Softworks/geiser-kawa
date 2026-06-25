@@ -38,6 +38,7 @@
 (require 'geiser-kawa-arglist)
 (require 'geiser-kawa-ext-help)
 (require 'geiser-kawa-java-location)
+(require 'geiser-kawa-connect)
 
 
 ;;; Code:
