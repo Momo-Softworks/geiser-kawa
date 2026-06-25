@@ -143,8 +143,8 @@ Argument MSG is passed by Geiser."
 ;; > convention.
 ;; Source:
 ;;  https://github.com/melpa/melpa/pull/6858#issuecomment-621596527
-(geiser-impl--add-to-alist 'regexp "\\.scm\\'" 'kawa t)
-(geiser-impl--add-to-alist 'regexp "\\.sld\\'" 'kawa t)
+(geiser-impl--add-to-alist 'regexp "\\.scm\\'" 'kawa)
+(geiser-impl--add-to-alist 'regexp "\\.sld\\'" 'kawa)
 
 ;; Check for kawa-geiser jar each time `run-kawa' is called.
 
