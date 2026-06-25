@@ -27,12 +27,12 @@ jobs:
         run: sudo apt-get update && sudo apt-get install -y emacs-nox
       - name: Install Cask
         run: |
-          curl -fsSL https://github.com/cask/cask/archive/refs/tags/v0.13.0.tar.gz | tar -xz
-          export PATH=$PATH:$PWD/cask-0.13.0/bin
+          curl -fsSL https://github.com/cask/cask/archive/refs/tags/v0.9.1.tar.gz | tar -xz
+          export PATH=$PATH:$PWD/cask-0.9.1/bin
           cask install
       - name: Byte-compile Elisp
         env:
           PATH: ${{ github.workspace }}/cask-0.13.0/bin:${{ env.PATH }}
         run: |
-          export PATH=$PATH:${{ github.workspace }}/cask-0.13.0/bin
+          export PATH=$PATH:${{ github.workspace }}/cask-0.9.1/bin
           cask emacs -Q --batch -L elisp -f batch-byte-compile elisp/*.el --eval '(setq byte-compile-error-on-warn nil)'
