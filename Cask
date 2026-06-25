@@ -12,7 +12,6 @@
 
 (development
  (depends-on "buttercup")
- (depends-on "cask")
  (depends-on "package-lint")
  (depends-on "flycheck")
  (depends-on "flycheck-package")

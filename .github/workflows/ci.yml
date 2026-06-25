@@ -30,7 +30,7 @@ jobs:
           curl -fsSL https://github.com/cask/cask/archive/refs/tags/v0.9.1.tar.gz | tar -xz
           echo "$PWD/cask-0.9.1/bin" >> $GITHUB_PATH
       - name: Install dependencies
-        run: cask install --no-dev
+        run: cask install
       - name: Byte-compile Elisp
         run: |
           cask emacs -Q --batch \
