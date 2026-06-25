@@ -308,10 +308,9 @@ never interferes with other Schemes.  Hung on `geiser-repl-mode-hook' and
   (when (eq geiser-impl--implementation 'kawa)
     (add-hook 'completion-at-point-functions #'geiser-kawa-capf nil t)))
 
-;; The hooks are now managed by geiser-kawa--maybe-load-optional in
-;; geiser-kawa.el.  Uncomment these if you want the custom capf always active:
-;; (add-hook 'geiser-repl-mode-hook #'geiser-kawa-capf-setup)
-;; (add-hook 'scheme-mode-hook #'geiser-kawa-capf-setup)
+;; Only activate in Kawa buffers, not on every scheme-mode buffer.
+;; The safety net in geiser.el handles any temp buffer focus issues.
+(add-hook 'geiser-mode-hook #'geiser-kawa-capf-setup)
 
 (provide 'geiser-kawa-devutil-complete)
 
