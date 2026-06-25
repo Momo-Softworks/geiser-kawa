@@ -32,7 +32,6 @@ jobs:
           cask install
       - name: Byte-compile Elisp
         env:
-          PATH: ${{ github.workspace }}/cask-0.13.0/bin:${{ env.PATH }}
+          PATH: ${{ github.workspace }}/cask-0.9.1/bin:${{ env.PATH }}
         run: |
-          export PATH=$PATH:${{ github.workspace }}/cask-0.9.1/bin
           cask emacs -Q --batch -L elisp -f batch-byte-compile elisp/*.el --eval '(setq byte-compile-error-on-warn nil)'
