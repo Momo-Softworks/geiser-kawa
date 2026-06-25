@@ -1,0 +1,602 @@
+# ============================================================================
+# geiser-kawa modernization — architect plan (Momo Softworks fork)
+# ============================================================================
+# Architect: Opus (Samuel's key). Workers: NaviGator models via delegate.py.
+# Run with the AGENTIC executor so workers edit existing files in place:
+#
+#   python3 ~/.claude/skills/architect/scripts/delegate.py \
+#       .architect/plan.yaml --all --executor eca
+#
+# IMPORTANT — verify commands need a toolchain on PATH (JDK 8, emacs 27+,
+# cask, git, network for Maven/jitpack/MELPA). Run delegate from inside a
+# shell that has them, e.g. Samuel's existing geiser-kawa env:
+#   guix shell -L ~/.config/guix/modules -m ~/Projects/kawa/guix.scm -- \
+#       python3 .../delegate.py .architect/plan.yaml --all --executor eca
+#
+# ---------------------------------------------------------------------------
+# FROZEN SEAMS (architect-owned; workers must NOT change these)
+# ---------------------------------------------------------------------------
+# S1 NAMES: the Elisp package name `geiser-kawa`, the implementation symbol
+#    `'kawa`, every `geiser-kawa-*` function, and every `geiser:NAME` Kawa
+#    procedure keep their current names (keeps the fork upstream-mergeable and
+#    preserves the Elisp<->Java protocol). Add new names; never rename.
+# S2 JAR: Maven artifactId stays `kawa-geiser`, version stays `0.1-SNAPSHOT`,
+#    so the fat jar is `target/kawa-geiser-0.1-SNAPSHOT-jar-with-dependencies.jar`
+#    (= the `geiser-kawa-deps-jar-path` default). Do NOT change it. groupId may
+#    change to `com.momosoftworks`.
+# S3 PROTOCOL: the `geiser:* -> Class:method` registry in Geiser.java
+#    (procMap, Geiser.java:34-46) is frozen for the existing 11 procedures:
+#      geiser:eval            -> kawageiser.GeiserEval:evalStr
+#      geiser:autodoc         -> kawageiser.GeiserAutodoc:autodoc
+#      geiser:completions     -> kawageiser.GeiserCompleteSymbol:getCompletions
+#      geiser:module-completions -> kawageiser.GeiserCompleteModule:completeModule
+#      geiser:load-file       -> kawageiser.GeiserLoadFile:loadFile
+#      geiser:no-values       -> kawageiser.GeiserNoValues:noValues
+#      geiser:macroexpand     -> kawageiser.GeiserMacroexpand:expand
+#      geiser:kawa-devutil-complete -> kawageiser.kawadevutil.Complete:completeJava
+#      geiser:kawa-devutil-complete-expr-tree -> ...Complete:getExprTreeFormatted
+#      geiser:kawa-devutil-expr-tree-formatted -> ...ExprTree:getExprTreeFormatted
+#      geiser:manual-epub-unzip-to-tmp-dir -> ...docutil.ManualEpubUnzipToTmpDir:unzipToTmpDir
+# S4 REUSE: these Elisp helpers are stable building blocks — call them, don't
+#    redefine: `geiser-kawa-util--eval`, `geiser-kawa-util--retort-result`,
+#    `geiser-kawa-devutil-complete--get-data` (returns an alist whose
+#    completion-type is "METHODS"/"SYMBOLS+PACKAGE-MEMBERS" etc.), and the
+#    classpath builder `geiser-kawa-arglist--make-classpath`.
+#
+# FILE OWNERSHIP (each file edited by exactly one goal; same-file goals are
+# chained via depends_on so eca never races):
+#   geiser-kawa.el, geiser-kawa-deps.el, quickstart.el  -> elisp-modernize
+#   pom.xml, src/main/java/**                            -> build-kawa311
+#   geiser-kawa-devutil-complete.el, tests/...capf...    -> capf-completion
+#   geiser-kawa-arglist.el, tests/...classpath...        -> kawacraft-classpath
+#   geiser-kawa-connect.el (new)                          -> connect-repl
+#   src/test/java/**                                      -> junit-tests
+#   tests/geiser-kawa-test.el                             -> buttercup-modernize
+#   .github/workflows/ci.yml (new)                        -> ci-github
+#   README.org                                            -> readme-fork
+#
+# STRETCH BACKLOG (architect-owned; NOT worker goals — see .architect/README.md):
+#   xref/jump-to-def (geiser:symbol-location), symbol-documentation,
+#   macroexpand-1-vs-all, enter-debugger, remote .class injection, MELPA recipe,
+#   auto-download Kawa manual.
+# ============================================================================
+
+project: geiser-kawa-modernization
+repo: /home/swilley/Projects/geiser-kawa
+defaults:
+  worker_model: gpt-oss-120b
+  judge_model: llama-3.3-70b-instruct
+
+goals:
+  # -------------------------------------------------------------------------
+  - id: elisp-modernize
+    title: Unbreak the Elisp against geiser 0.32 + refresh the fork identity
+    deliverable:
+      - elisp/geiser-kawa.el
+      - elisp/geiser-kawa-deps.el
+      - quickstart.el
+    contract: |
+      Make these FIVE exact string replacements with your edit_file tool, then
+      stop. Change NOTHING else. Every literal you need is inlined below — apply
+      the edits directly; do NOT spend the turn re-reading the files.
+      Edit 1 (elisp/geiser-kawa.el) — replace the line
+        ;; Maintainer: spellcard199 <spellcard199@protonmail.com>
+      with
+        ;; Maintainer: Momo Softworks
+      Edit 2 (elisp/geiser-kawa.el) — replace
+        ;; Homepage: https://gitlab.com/emacs-geiser/kawa
+      with
+        ;; Homepage: https://github.com/Momo-Softworks/geiser-kawa
+      Edit 3 (elisp/geiser-kawa.el) — replace
+        ;; Package-Requires: ((emacs "26.1") (geiser "0.16"))
+      with
+        ;; Package-Requires: ((emacs "27.1") (geiser "0.26"))
+      Edit 4 (elisp/geiser-kawa.el) — replace
+        ;; Version: 0.0.1
+      with
+        ;; Version: 0.1.0
+      Edit 5 (in BOTH elisp/geiser-kawa.el ~line 161 AND
+      elisp/geiser-kawa-deps.el ~line 59) — replace the parenthesized call
+        (run-geiser 'kawa)
+      with
+        (geiser 'kawa)
+      Leave the original "Author:" line and all "Copyright" lines UNTOUCHED
+      (keep attribution to the original author). Leave the docstring/comment
+      mentions of run-geiser (geiser-kawa.el:156, geiser-kawa-deps.el:56) ALONE
+      — only the two parenthesized CALL sites change. Do not touch the
+      run-kawa/switch-to-kawa autoload cookies in geiser-kawa-globals.el (out of
+      scope). Leave every function name, the define-geiser-implementation, and
+      the geiser:* protocol exactly as-is.
+    context: |
+      Why: geiser 0.32 made run-geiser an obsolete alias of geiser
+      ((define-obsolete-function-alias 'run-geiser 'geiser "Geiser 0.26")), so
+      calling it emits warnings. This stops calling it and stamps the fork. No
+      behaviour change.
+      Both call sites are the identical token sequence "(run-geiser 'kawa)", so a
+      replace-all of that exact string is safe: the comment mentions use the
+      backtick form `run-geiser' (no open paren) and will NOT match. Surrounding
+      context to make your edit_file old_string unique if needed:
+        geiser-kawa.el:160-161 (inside geiser-kawa-run-kawa):
+            (if (file-exists-p geiser-kawa-deps-jar-path)
+                (run-geiser 'kawa)
+        geiser-kawa-deps.el:59 (end of the compile-finish hook):
+            (run-geiser 'kawa))
+    verify:
+      kind: command
+      run: |
+        set -e
+        # No parenthesized run-geiser CALL may remain (comment mentions are OK):
+        ! grep -rn '(run-geiser' elisp quickstart.el
+        grep -q 'Momo Softworks' elisp/geiser-kawa.el
+        grep -Eq 'Package-Requires:.*geiser "0\.26"' elisp/geiser-kawa.el
+        grep -Eq 'Version: 0\.1\.0' elisp/geiser-kawa.el
+        # Edited files must still read as valid Elisp (real reader, not forward-sexp):
+        emacs -Q --batch --eval '(dolist (f (list "elisp/geiser-kawa.el" "elisp/geiser-kawa-deps.el" "quickstart.el")) (with-temp-buffer (insert-file-contents f) (goto-char (point-min)) (condition-case e (while t (read (current-buffer))) (end-of-file nil) (error (princ (format "READ FAIL %s: %S\n" f e)) (kill-emacs 1)))))'
+    budget: 5
+
+  # -------------------------------------------------------------------------
+  - id: build-kawa311
+    title: Build the fat jar against a clean Kawa 3.1.1 + JDK 8 (no jitpack pin)
+    deliverable:
+      - pom.xml
+    contract: |
+      `./mvnw -q -DskipTests package` must succeed and produce
+      `target/kawa-geiser-0.1-SNAPSHOT-jar-with-dependencies.jar` (S2 — do not
+      rename it). The build must NOT depend on the jitpack git-commit pin of
+      kawa-devutil resolving over the network at build time. Target JDK 8 — keep
+      `maven.compiler.source`/`maven.compiler.target` = 1.8 exactly as the
+      current pom already has them (do NOT bump to a higher release: the build
+      env is OpenJDK 8, Kawa 3.1.1 is a Java 8 jar, and the KawaCraft / Forge
+      1.7.10 consumer is a Java 8 world). groupId may become com.momosoftworks;
+      artifactId=kawa-geiser, version=0.1-SNAPSHOT unchanged.
+      The Java SEAMS in S3 (class/method names the procMap binds) must remain
+      compilable — if a Kawa-internals change forces edits under
+      src/main/java/**, keep every `geiser:*` landing method's name+signature.
+    context: |
+      This is the highest-risk goal (flagged for architect repair on escalation).
+      HISTORICAL (pre-fix) pom: the ONLY real dependency was
+      `com.gitlab.spellcard199:kawa-devutil:b550f77236...` resolved via a
+      jitpack <repository>; kawa-devutil transitively bundles an OLD Kawa
+      ("master", ~2020) and reaches into Kawa compiler internals
+      (gnu.expr.*, gnu.mapping.*, gnu.kawa.* — e.g. CompiledProc, LangObjType,
+      ExprWrap, CursorFinder). pom targets Java 8.
+      Options, in order of preference:
+        (a) Add a direct, pinned Kawa 3.1.1 dependency and keep kawa-devutil but
+            pin it to a tag/commit that targets Kawa 3.1.1, OR vendor
+            kawa-devutil's source under src/main/java/kawadevutil/ so the build
+            is self-contained.
+        (b) If Kawa 3.1.1 is not on Maven Central, install it to the local repo
+            from the jar Samuel already has at
+            /home/swilley/Projects/KawaCraft/libs/kawa.jar (Kawa 3.1.1):
+              ./mvnw install:install-file -Dfile=<path> -DgroupId=kawa \
+                 -DartifactId=kawa -Dversion=3.1.1 -Dpackaging=jar
+            and depend on kawa:kawa:3.1.1.
+      Expect to fix kawa-devutil's use of formerly-private Kawa internals against
+      3.1.1. If you cannot make autodoc/exprtree compile against 3.1.1 within
+      budget, STOP and escalate with the exact compiler errors — the architect
+      will freeze a reduced Java seam.
+    # DONE BY ARCHITECT (2026-06-24). Resolution: the cached kawa-devutil jar is
+    # a shaded fat jar that already BUNDLES Kawa and has NO transitive compile
+    # deps (its generated pom only declares test-scope testng). So the only tie
+    # to jitpack was the <repository> + git-SHA version in our pom. Fix: vendored
+    # that jar into an in-project Maven repo at libs/repo and pointed the pom at
+    # file://${project.basedir}/libs/repo, removing the jitpack <repository>. The
+    # deep "recompile kawa-devutil against released Kawa 3.1.1 internals" path was
+    # deliberately NOT taken — unnecessary, since the user's runtime Kawa is their
+    # system 3.1.1 and the bundled Kawa only serves the included-kawa/test path,
+    # which already works. JDK target kept at 1.8. Verified: fat jar builds with
+    # ~/.m2 kawa-devutil removed and no jitpack reachable.
+    verify:
+      kind: command
+      run: |
+        set -e
+        ! grep -qi jitpack pom.xml
+        test -f libs/repo/com/gitlab/spellcard199/kawa-devutil/b550f77236c9c10b1598637a9d1b09bbe2be8773/kawa-devutil-b550f77236c9c10b1598637a9d1b09bbe2be8773.jar
+        ./mvnw -q -DskipTests package
+        test -f target/kawa-geiser-0.1-SNAPSHOT-jar-with-dependencies.jar
+    budget: 10
+    worker_model: gpt-oss-120b
+
+  # -------------------------------------------------------------------------
+  - id: capf-completion
+    title: Expose Java-aware completion as a completion-at-point-function
+    deliverable:
+      - elisp/geiser-kawa-devutil-complete.el
+      - elisp/tests/geiser-kawa-capf-test.el
+    contract: |
+      Add `geiser-kawa-capf` — a completion-at-point-function — that composes
+      with corfu/company (no buffer mutation), reusing the FROZEN data source
+      `geiser-kawa-devutil-complete--get-data` (S4). It must return either nil
+      or (START END COLLECTION . PROPS) where START/END bound the symbol being
+      completed and COLLECTION is the list of candidate strings derived from the
+      get-data alist (completion-type "METHODS" -> the `names`; the
+      symbols+package-members case -> `symbol-names` ++ `package-members`).
+      Register it by adding `geiser-kawa-capf` to
+      `completion-at-point-functions` (buffer-local) from a function hung on
+      `geiser-repl-mode-hook` AND `scheme-mode-hook`, but ONLY for the kawa impl.
+      Keep the existing interactive `geiser-kawa-devutil-complete-at-point`
+      working (do not delete it).
+    context: |
+      `geiser-kawa-devutil-complete--get-data (code-str cursor-index)` sends
+      `(geiser:kawa-devutil-complete <code> <idx>)` and returns an alist with
+      keys incl: completion-type — EXACT literals are "METHODS", "FIELDS", and
+      "SYMBOLS_PLUS_PACKAGEMEMBERS" (note the underscores; complete.el:133-138) —
+      before-cursor, owner-class, modifiers, names, symbol-names, package-members.
+      Region/cursor logic already exists in
+      `geiser-kawa-devutil-complete--code-point-from-toplevel` (~:145) — reuse it
+      to compute START/END/cursor-index rather than reimplementing.
+      The capf test should start the REPL like the existing suite
+      (tests/geiser-kawa-test.el does `geiser-kawa-deps-mvnw-package` +
+      use-included-kawa t + run-kawa in before-all) and assert that calling
+      `geiser-kawa-capf` in a buffer containing "(java.lang.String:)" with point
+      after the colon yields a COLLECTION containing "format" (a String method).
+    spec: |
+      Pure Elisp goal. Do not touch the Java side.
+    # NOTE (architect, 2026-06-24): verify is the FOCUSED capf spec loaded
+    # explicitly, NOT ./run-elisp-tests.sh. The whole-repo suite also runs the
+    # legacy geiser-kawa-test.el, which has 3 pre-existing geiser-0.32 failures
+    # (stale "* Kawa REPL *" buffer name, eval-buffer/macroexpand specs) that are
+    # buttercup-modernize's job — gating capf on them would deadlock (that goal
+    # depends on this one). DONE BY ARCHITECT: authored geiser-kawa-capf +
+    # geiser-kawa-capf--candidates + geiser-kawa-capf-setup (hung on
+    # geiser-repl-mode-hook & scheme-mode-hook, kawa-impl only) and the focused
+    # spec; both specs green against the live included-Kawa REPL (returns
+    # java.lang.String "format"). Above worker level: exact Kawa-side literals
+    # (SYMBOLS_PLUS_PACKAGEMEMBERS), capf-must-not-error semantics, live REPL.
+    verify:
+      kind: command
+      run: "cask install >/dev/null 2>&1 || true; cask emacs --batch -L . -L elisp -l buttercup -l elisp/tests/geiser-kawa-capf-test.el -f buttercup-run"
+    depends_on: [elisp-modernize, build-kawa311]
+    budget: 7
+
+  # -------------------------------------------------------------------------
+  - id: kawacraft-classpath
+    title: Add a configurable extra classpath (for project deps like Forge/MC)
+    deliverable:
+      - elisp/geiser-kawa-arglist.el
+      - elisp/tests/geiser-kawa-classpath-test.el
+    contract: |
+      Add defcustom `geiser-kawa-extra-classpath` (type: list of strings,
+      default nil; safe-local-variable predicate so it can be set from
+      .dir-locals.el). In `geiser-kawa-arglist--make-classpath`, APPEND each
+      entry of `geiser-kawa-extra-classpath` to the classpath list it builds,
+      after the existing entries. Preserve current behaviour when the var is nil.
+      The classpath is joined with the platform separator (path-separator).
+    context: |
+      `geiser-kawa-arglist--make-classpath` (geiser-kawa-arglist.el:35) currently
+      returns a list of jar paths (the kawa libs if a real kawa is found, else
+      just `geiser-kawa-deps-jar-path`). `geiser-kawa-arglist--make-classpath-arg`
+      (:74) joins them into `-Djava.class.path=...`.
+      Use case: a KawaCraft developer sets, in the project's .dir-locals.el,
+        ((scheme-mode . ((geiser-kawa-extra-classpath
+           . ("/path/to/forge-deobf.jar" "/path/to/build/classes")))))
+      so Geiser completion/autodoc can see Forge/Minecraft classes.
+      The test must NOT need a running REPL — it should `let`-bind
+      `geiser-kawa-extra-classpath` to ("/tmp/a.jar") and assert that
+      `(geiser-kawa-arglist--make-classpath)` contains "/tmp/a.jar", and that
+      with it nil the result is unchanged from before.
+    # NOTE (architect, 2026-06-24): `cask exec buttercup … <file>` treats its arg
+    # as a DIRECTORY to discover specs in, not a file — load the single spec
+    # explicitly with -l and run buttercup-run instead. The make-classpath
+    # function must keep returning a STRING (path-separator-joined), since
+    # geiser-kawa-arglist--make-classpath-arg formats it into -Djava.class.path
+    # with %s; returning a list silently produces a broken classpath.
+    verify:
+      kind: command
+      run: "cask install >/dev/null 2>&1 || true; cask emacs --batch -L . -L elisp -l buttercup -l elisp/tests/geiser-kawa-classpath-test.el -f buttercup-run"
+    depends_on: [elisp-modernize]
+    budget: 6
+
+  # -------------------------------------------------------------------------
+  - id: connect-repl
+    title: Connect Geiser to an already-running external Kawa REPL (in-game socket)
+    deliverable:
+      - elisp/geiser-kawa-connect.el
+    contract: |
+      New module providing an autoloaded interactive command
+      `geiser-kawa-connect (host port)` that attaches a Geiser REPL to a Kawa
+      process already listening on a TCP socket (KawaCraft's in-game REPL:
+      client=4243, server=4242). Implement via geiser's remote-connection entry
+      point `geiser-connect` for the `'kawa` implementation (geiser 0.26+ exposes
+      `geiser-connect IMPL HOST PORT`). The command must:
+        - default host "localhost", read host+port interactively,
+        - call (geiser-connect 'kawa host port),
+        - (require 'geiser-kawa) so the impl is registered.
+      Provide the feature `geiser-kawa-connect`. Do NOT edit geiser-kawa.el.
+    context: |
+      KawaCraft (a Minecraft mod) starts a raw Kawa REPL on a socket during the
+      Forge init phase; redefining a Scheme procedure over it hot-reloads game
+      behaviour. Today Samuel uses a raw comint; this makes it a first-class
+      Geiser REPL (eval-from-buffer, autodoc, completion against the LIVE game).
+      Geiser exposes `geiser-connect` (geiser-repl.el) which prompts for impl,
+      host, port and dials a TCP REPL; the kawa impl's prompt-regexp is
+      `"#|kawa:[0-9]+|# "` (geiser-kawa--prompt-regexp). The in-game REPL is raw
+      Kawa WITHOUT kawa-geiser's `geiser:*` procedures loaded, so eval works but
+      Java-aware completion/autodoc may not — note this in the docstring.
+    spec: |
+      Mechanical verify only covers that it byte-compiles and defines the
+      command; the live connect is a manual/operator check (see README backlog).
+    verify:
+      kind: command
+      run: |
+        set -e
+        cask install >/dev/null 2>&1 || true
+        cask emacs -Q --batch -L . -L elisp -f batch-byte-compile elisp/geiser-kawa-connect.el
+        emacs -Q --batch -L elisp --eval '(progn (require (quote geiser-kawa-connect)) (unless (commandp (quote geiser-kawa-connect)) (kill-emacs 1)))' 2>/dev/null || \
+        grep -q "(defun geiser-kawa-connect" elisp/geiser-kawa-connect.el
+    depends_on: [elisp-modernize]
+    budget: 6
+
+  # -------------------------------------------------------------------------
+  - id: junit-tests
+    title: Java unit tests pass against Kawa 3.1.1
+    deliverable:
+      - src/test/java/kawageiser/GeiserSmokeTest.java
+    contract: |
+      Create exactly ONE new file, src/test/java/kawageiser/GeiserSmokeTest.java,
+      a TestNG test class in package `kawageiser` with a single @Test method that
+      exercises the Java-aware completion seam (the existing GeiserTest.java and
+      GeiserAutodocTest.java already cover eval+autodoc and must keep passing —
+      do NOT edit them). The new test must assert that
+      `Complete.completeJava` for the code "(java.lang.String:)" with cursor 18
+      returns a string CONTAINING "format" (a java.lang.String method).
+      `./mvnw -q test` must stay green. Do not touch any other file.
+    context: |
+      Write this file VERBATIM (it is self-contained and compiles against the
+      vendored build — every import and type is exact; do not invent others):
+
+      === FILE: src/test/java/kawageiser/GeiserSmokeTest.java ===
+      /*
+       * SPDX-License-Identifier: BSD-3-Clause
+       */
+      package kawageiser;
+
+      import gnu.expr.Language;
+      import gnu.lists.IString;
+      import gnu.math.IntNum;
+      import gnu.mapping.Environment;
+      import kawa.standard.Scheme;
+      import kawageiser.kawadevutil.Complete;
+      import org.testng.annotations.Test;
+
+      import static org.testng.Assert.assertTrue;
+
+      public class GeiserSmokeTest {
+          @Test
+          public void testJavaMemberCompletionContainsFormat() throws Throwable {
+              // completeJava needs a current Language; set up a Scheme like the
+              // autodoc test does.
+              Scheme scheme = new Scheme();
+              Language saveLang = Language.setSaveCurrent(scheme);
+              try {
+                  // "(java.lang.String:)" — index 18 is right after the ':'.
+                  String result = Complete.completeJava(
+                          IString.valueOf("(java.lang.String:)"),
+                          IntNum.valueOf(18));
+                  assertTrue(result.contains("format"),
+                          "expected a java.lang.String member 'format' in: " + result);
+              } finally {
+                  Language.restoreCurrent(saveLang);
+              }
+          }
+      }
+      === END FILE ===
+
+      Why these types: Complete.completeJava is declared
+      `public static String completeJava(IString codeStr, IntNum cursorIndex)`
+      in src/main/java/kawageiser/kawadevutil/Complete.java:38. IString is
+      gnu.lists.IString (build it with IString.valueOf(String)); IntNum is
+      gnu.math.IntNum (build it with IntNum.valueOf(int)). The bundled Kawa
+      classes (gnu.*, kawa.*) come transitively from the vendored kawa-devutil
+      jar, exactly as GeiserAutodocTest.java already uses them.
+    verify:
+      kind: command
+      run: |
+        set -e
+        test -f src/test/java/kawageiser/GeiserSmokeTest.java
+        grep -q 'class GeiserSmokeTest' src/test/java/kawageiser/GeiserSmokeTest.java
+        grep -q 'completeJava' src/test/java/kawageiser/GeiserSmokeTest.java
+        ./mvnw -q test
+    depends_on: [build-kawa311]
+    budget: 7
+
+  # -------------------------------------------------------------------------
+  # DONE BY ARCHITECT (2026-06-24). The 3 baseline failures were all geiser-0.32
+  # behaviour drift, fixed in geiser-kawa-test.el:
+  #   1. REPL buffer renamed -> use (geiser-repl--buffer-name 'kawa) not the
+  #      hard-coded "* Kawa REPL *" (now "*Geiser Kawa REPL*").
+  #   2. the eval spec used the ASYNC geiser-eval-buffer, whose late "=> result"
+  #      callback inserted into the shared work buffer and POISONED the
+  #      macroexpand spec -> replaced with a synchronous send/wait + retort-output
+  #      == "foobar".
+  #   3. macroexpand: expected value was correct, but geiser-expand-last-sexp is
+  #      async -> poll the geiser debug buffer (accept-process-output, ~4s cap)
+  #      before reading it.
+  # Also fixed the broken runner: run-elisp-tests.sh had no shebang and a 0644
+  # mode, so `./run-elisp-tests.sh` failed with permission denied — added
+  # `#!/bin/sh` and the exec bit. NOTE: the contract's premise that
+  # geiser-completion--complete is "removed/private" in 0.32 is FALSE (it still
+  # works and the spec passes), and geiser-kawa-capf now has its own dedicated
+  # spec (geiser-kawa-capf-test.el), so that symbol-completion spec was kept
+  # as-is rather than rewritten. Whole suite: 14 specs, 0 failed.
+  - id: buttercup-modernize
+    title: Modernize the Elisp test suite and keep it green
+    deliverable:
+      - elisp/tests/geiser-kawa-test.el
+      - run-elisp-tests.sh
+    contract: |
+      Update the buttercup spec so `./run-elisp-tests.sh` is green on the
+      current geiser (0.32) + the Kawa-3.1.1 jar. Use (geiser-repl--buffer-name
+      'kawa) instead of the hard-coded REPL buffer name; replace the async
+      geiser-eval-buffer with a synchronous send/wait assertion; make the
+      macroexpand spec wait for its async REPL result. Keep the existing
+      eval/autodoc/macroexpand/completion specs working. Make run-elisp-tests.sh
+      actually executable (shebang + exec bit).
+    context: |
+      run-elisp-tests.sh = `cask exec buttercup -L .`. The spec's before-all runs
+      `geiser-kawa-deps-mvnw-package`, waits, sets use-included-kawa t, starts the
+      REPL. Existing specs: jar exists; process live; geiser-eval-buffer of
+      (display 'foobar); geiser:autodoc '(display); macroexpand of (when #t ...);
+      `geiser-completion--complete "dis"` (THIS is the brittle one); Java
+      completion get-data "(java.lang.String:)" 18 -> "METHODS"; exprtree.
+    verify:
+      kind: command
+      run: "cask install >/dev/null 2>&1 || true; ./run-elisp-tests.sh"
+    depends_on: [capf-completion]
+    budget: 7
+
+  # -------------------------------------------------------------------------
+  - id: ci-github
+    title: Add GitHub Actions CI (build jar + Java tests + Elisp lint)
+    deliverable:
+      - .github/workflows/ci.yml
+    contract: |
+      A valid GitHub Actions workflow that, on push and pull_request, runs two
+      jobs: (1) `java` — set up JDK 8 (temurin), run `./mvnw -q package`;
+      (2) `elisp` — install Emacs + Cask, run `cask install` then
+      `cask emacs -Q --batch -L elisp -f batch-byte-compile elisp/*.el` (must
+      exit non-zero on byte-compile error via
+      --eval '(setq byte-compile-error-on-warn nil)'). It need not run the
+      REPL-integration buttercup specs (they need a Kawa runtime) — byte-compile
+      + package-lint is enough for CI.
+    context: |
+      The fork's origin is github.com/Momo-Softworks/geiser-kawa, so use GitHub
+      Actions (not the upstream GitLab CI). No CI exists today. The maven wrapper
+      (`./mvnw`, Maven 3.6.3) needs no system Maven. Pin actions to major
+      versions (actions/checkout@v4, actions/setup-java@v4).
+    verify:
+      kind: command
+      run: "python3 -c \"import yaml,sys; d=yaml.safe_load(open('.github/workflows/ci.yml')); assert 'jobs' in d and len(d['jobs'])>=2, 'need >=2 jobs'; print('ok')\" && grep -q 'mvnw' .github/workflows/ci.yml && grep -q 'batch-byte-compile' .github/workflows/ci.yml"
+    depends_on: [build-kawa311]
+    budget: 5
+
+  # -------------------------------------------------------------------------
+  - id: readme-fork
+    title: Rewrite README for the Momo Softworks fork
+    deliverable:
+      - README.org
+    contract: |
+      Update README.org for the fork: what it is, that it is a Momo Softworks
+      fork of gitlab.com/emacs-geiser/kawa, install (clone + `./mvnw package` +
+      add elisp/ to load-path or use-package with :load-path), supported Kawa
+      (3.1.1) and geiser (0.32), the feature list, and a short "Using with
+      KawaCraft" subsection covering `geiser-kawa-extra-classpath` and
+      `geiser-kawa-connect`. Keep attribution to the original author.
+    context: |
+      Current README.org is the 2021 upstream one (install via the old gitlab
+      repo, MELPA-draft notes). New entry points to document:
+        - geiser-kawa-extra-classpath (project classpath, .dir-locals.el)
+        - geiser-kawa-connect (attach to a running Kawa socket REPL; 4243 client
+          / 4242 server for KawaCraft)
+        - geiser-kawa-capf (corfu/company completion)
+    verify:
+      kind: judge
+      rubric: |
+        PASS only if README.org: (1) states it is a Momo Softworks fork and
+        credits the original author/upstream; (2) gives concrete install steps
+        incl. building the jar with ./mvnw package; (3) documents
+        geiser-kawa-extra-classpath AND geiser-kawa-connect; (4) names the
+        supported Kawa (3.1.1) and geiser (0.32) versions. Otherwise FAIL with a
+        one-line reason.
+      threshold: pass
+    depends_on: [elisp-modernize]
+    budget: 4
+
+  # ===========================================================================
+  # FOLLOW-UP FEATURE: member-precise Java jump-to-definition (M-.)
+  # New seam S5 (additive; S3 freezes the existing 11 procedures, new ones are
+  # allowed): Kawa procedure `geiser:java-symbol-location` ->
+  # `kawageiser.GeiserJavaLocation:locate`. Takes the SAME (code-str,
+  # cursor-index) as completion (so Elisp reuses --code-point-from-toplevel),
+  # resolves owner-class via kawa-devutil reflection, and returns a readable
+  # Lisp form (string keys, 2-element lists, like the completion data):
+  #   (("matches" ((("member" "format")
+  #                 ("signature" "public static java.lang.String format(...)")
+  #                 ("source-resource" "java/lang/String.java")
+  #                 ("line" 2961)) ...))
+  #    ("class" "java.lang.String"))
+  # Member-precise line numbers come from `javap -l' (LineNumberTable) of the
+  # compiled class; overloads are separate matches keyed by signature so Elisp
+  # can offer a chooser. Validated: RFG recompiled MC classes carry line tables
+  # that map exactly into mcp_patched_minecraft-sources.jar.
+  # New defcustom `geiser-kawa-source-path` (sibling of -extra-classpath): list
+  # of source jars/zips/dirs (.dir-locals.el-settable), best-effort JDK src.zip.
+  # ===========================================================================
+  - id: java-loc-backend
+    title: Kawa backend for member-precise Java jump-to-definition (geiser:java-symbol-location)
+    deliverable:
+      - src/main/java/kawageiser/GeiserJavaLocation.java
+      - src/test/java/kawageiser/GeiserJavaLocationTest.java
+    contract: |
+      Add GeiserJavaLocation.locate(IString codeStr, IntNum cursorIndex) and
+      register geiser:java-symbol-location -> kawageiser.GeiserJavaLocation:locate
+      in Geiser.java's procMap (S5). Reuse CompletionFindGeneric.find +
+      CompletionForClassMember.getOwnerClass()/getCursorFinder() to resolve the
+      owner class and member; read precise lines from `javap -l' (pass the
+      class's CodeSource as -classpath; null CodeSource = bootstrap JDK class).
+      Return the (matches/class) Lisp form above. Keep S3's existing methods.
+    context: |
+      Done by architect 2026-06-24. javap -l output format (JDK 8): a 2-space
+      method decl line ".. name(params);", then "    LineNumberTable:" then
+      "      line N: 0" (first entry = the line). Field lines are not in
+      LineNumberTable (best-effort/skip). Nested classes Foo$Bar -> source
+      resource pkg/Foo.java (strip at first '$').
+    verify:
+      kind: command
+      run: "./mvnw -q test"
+    depends_on: [build-kawa311]
+    budget: 8
+
+  - id: java-loc-sourcepath
+    title: Elisp source-path resolver (find/extract a .java from source jars/zips/dirs)
+    deliverable:
+      - elisp/geiser-kawa-java-location.el
+      - elisp/tests/geiser-kawa-java-location-test.el
+    contract: |
+      New module providing defcustom `geiser-kawa-source-path` (repeat string,
+      default nil, :safe a list-of-strings predicate, .dir-locals.el-settable)
+      and a pure function
+        (geiser-kawa-java-location--resolve-source RESOURCE) -> file path or nil
+      where RESOURCE is like "net/minecraft/util/MathHelper.java". It searches
+      each entry of geiser-kawa-source-path: a directory (look for the file
+      under it), or a .jar/.zip/.srcjar (extract that entry to a cache dir under
+      temporary-file-directory and return the extracted path). Best-effort:
+      also try a JDK src.zip discovered from the `java' binary on PATH.
+      No running REPL needed.
+    context: |
+      Mirror geiser-kawa-extra-classpath (geiser-kawa-arglist.el) for the
+      defcustom shape. For zip extraction reuse Emacs' `arc-mode'/`archive-*' or
+      shell `unzip`; deterministic cache path = (expand-file-name RESOURCE
+      (make a stable subdir of temporary-file-directory)). Provide feature
+      `geiser-kawa-java-location'.
+    verify:
+      kind: command
+      run: "cask install >/dev/null 2>&1 || true; cask emacs --batch -L . -L elisp -l buttercup -l elisp/tests/geiser-kawa-java-location-test.el -f buttercup-run"
+    depends_on: [elisp-modernize]
+    budget: 7
+
+  - id: java-loc-jump
+    title: Wire member-precise Java jump-to-def into M-. (overload chooser)
+    deliverable:
+      - elisp/geiser-kawa-java-location.el
+      - elisp/tests/geiser-kawa-java-location-jump-test.el
+    contract: |
+      Add an autoloaded interactive command `geiser-kawa-jump-to-java-definition'
+      that: sends (geiser:java-symbol-location <code-str> <cursor-index>) using
+      the region/cursor from geiser-kawa-devutil-complete--code-point-from-toplevel,
+      reads the matches, resolves each match's source-resource via
+      geiser-kawa-java-location--resolve-source, and visits the file at the
+      match `line'. If >1 match, `completing-read' over their `signature's first.
+      Also register geiser's `symbol-location' method for the kawa impl (drop it
+      from `unsupported-procedures' in geiser-kawa.el) so M-. routes here.
+      Degrade gracefully (message, no error) when there are no matches or the
+      source is not on geiser-kawa-source-path.
+    context: |
+      Reuse --code-point-from-toplevel (returns code-str + cursor-index) exactly
+      as geiser-kawa-capf does. Backend returns string keys; read with
+      geiser-kawa-util--retort-result then (cadr (assoc "line" m)) etc.
+    verify:
+      kind: command
+      run: "cask install >/dev/null 2>&1 || true; cask emacs --batch -L . -L elisp -l buttercup -l elisp/tests/geiser-kawa-java-location-jump-test.el -f buttercup-run"
+    depends_on: [java-loc-backend, java-loc-sourcepath, capf-completion]
+    budget: 8

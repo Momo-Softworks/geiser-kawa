@@ -56,7 +56,7 @@ Argument DESC is passed by Emacs when compilation finishes."
     ;; Using `run-geiser' instead of `run-kawa' so that callers can
     ;; also be advices of `run-kawa' without it becoming an infinite
     ;; recursion.
-    (run-geiser 'kawa))
+    (geiser 'kawa))
   (remove-hook 'compilation-finish-functions
                #'geiser-kawa-deps--run-kawa--compile-hook))
 

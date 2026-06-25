@@ -1,0 +1,38 @@
+name: CI
+
+on:
+  push:
+    branches: ["*"]
+  pull_request:
+    branches: ["*"]
+
+jobs:
+  java:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Set up JDK 8
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "8"
+      - name: Build with Maven
+        run: ./mvnw -q package
+
+  elisp:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install Emacs
+        run: sudo apt-get update && sudo apt-get install -y emacs-nox
+      - name: Install Cask
+        run: |
+          curl -fsSL https://github.com/cask/cask/archive/refs/tags/v0.13.0.tar.gz | tar -xz
+          export PATH=$PATH:$PWD/cask-0.13.0/bin
+          cask install
+      - name: Byte-compile Elisp
+        env:
+          PATH: ${{ github.workspace }}/cask-0.13.0/bin:${{ env.PATH }}
+        run: |
+          export PATH=$PATH:${{ github.workspace }}/cask-0.13.0/bin
+          cask emacs -Q --batch -L elisp -f batch-byte-compile elisp/*.el --eval '(setq byte-compile-error-on-warn nil)'

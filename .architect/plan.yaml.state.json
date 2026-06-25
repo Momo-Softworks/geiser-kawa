@@ -1,0 +1,70 @@
+{
+  "elisp-modernize": {
+    "status": "done",
+    "attempts": 2,
+    "executor": "eca"
+  },
+  "build-kawa311": {
+    "status": "done",
+    "attempts": 1,
+    "executor": "architect",
+    "note": "vendored kawa-devutil into libs/repo; dropped jitpack; JDK 8"
+  },
+  "connect-repl": {
+    "status": "done",
+    "attempts": 2,
+    "executor": "eca"
+  },
+  "ci-github": {
+    "status": "done",
+    "attempts": 1,
+    "executor": "eca"
+  },
+  "readme-fork": {
+    "status": "done",
+    "attempts": 1,
+    "executor": "eca"
+  },
+  "kawacraft-classpath": {
+    "status": "done",
+    "attempts": 6,
+    "executor": "eca+architect",
+    "note": "architect repaired: reverted out-of-scope globals.el dup defcustom; fixed make-classpath to return a path-separator-joined STRING (worker had returned a list, breaking -Djava.class.path); un-nested the test file and rewrote it with string assertions; fixed the verify to load the spec file explicitly"
+  },
+  "junit-tests": {
+    "status": "done",
+    "attempts": 1,
+    "executor": "architect",
+    "note": "architect-authored GeiserSmokeTest.java (delicate Kawa IString/IntNum types + Language setup); 7/7 tests green. Tightened verify so a no-op can't false-pass."
+  },
+  "capf-completion": {
+    "status": "done",
+    "attempts": 1,
+    "executor": "architect",
+    "note": "architect-authored geiser-kawa-capf (+candidates +setup hooks) and focused live-REPL spec; both specs green (returns java.lang.String 'format'). Fixed plan deadlock: verify is the focused spec, not the whole suite (which has 3 pre-existing failures buttercup-modernize owns). Inlined exact literal SYMBOLS_PLUS_PACKAGEMEMBERS. HARDENING (after end-to-end test vs real net.minecraft.* classes): rewrote capf region calc to use syntax-ppss and append missing close-parens to the STRING (no buffer mutation), so completion works mid-typing on UNBALANCED exprs too (the original --code-point-from-toplevel scan-errored). Verified vs MathHelper + java.lang.String, balanced+unbalanced+nested."
+  },
+  "buttercup-modernize": {
+    "status": "done",
+    "attempts": 1,
+    "executor": "architect",
+    "note": "fixed 3 geiser-0.32 drift bugs in geiser-kawa-test.el (REPL buffer name via API; async geiser-eval-buffer poison -> sync send/wait; async macroexpand -> poll debug buffer) + made run-elisp-tests.sh executable (shebang+chmod). Whole suite 14 specs / 0 failed (incl capf + classpath specs)."
+  },
+  "java-loc-backend": {
+    "status": "done",
+    "attempts": 1,
+    "executor": "architect",
+    "note": "GeiserJavaLocation.locate via javap -l LineNumberTable parsing + completion owner-class resolution; registered geiser:java-symbol-location (S5). 8/8 Java tests green (locate String.format -> java/lang/String.java, real lines)."
+  },
+  "java-loc-sourcepath": {
+    "status": "done",
+    "attempts": 1,
+    "executor": "architect",
+    "note": "geiser-kawa-source-path defcustom + --resolve-source (dir + jar/zip extraction via unzip, best-effort JDK src.zip). 3/3 no-REPL specs green."
+  },
+  "java-loc-jump": {
+    "status": "done",
+    "attempts": 1,
+    "executor": "architect",
+    "note": "geiser-kawa-jump-to-java-definition (overload chooser via completing-read on signatures) bound to M-. for kawa buffers; required from geiser-kawa.el. Live-REPL spec 1/1 (String:format -> java/lang/String.java, real lines). NOTE: M-. via a dedicated command + local-set-key, not geiser's symbol-location marshall (left in unsupported-procedures)."
+  }
+}

@@ -44,6 +44,7 @@ public class Geiser implements Runnable {
         procMap.put("geiser:manual-epub-unzip-to-tmp-dir", "kawageiser.docutil.ManualEpubUnzipToTmpDir:unzipToTmpDir");
         procMap.put("geiser:macroexpand", "kawageiser.GeiserMacroexpand:expand");
         procMap.put("geiser:kawa-devutil-expr-tree-formatted", "kawageiser.kawadevutil.ExprTree:getExprTreeFormatted");
+        procMap.put("geiser:java-symbol-location", "kawageiser.GeiserJavaLocation:locate");
 
         try {
             if (lang.lookup("geiser:eval") == null) {

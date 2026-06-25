@@ -52,17 +52,23 @@
         <maven.compiler.target>1.8</maven.compiler.target>
     </properties>
 
+    <!--
+      kawa-devutil is vendored into this repository under libs/repo (a local
+      Maven repository) so the build is fully self-contained and does NOT depend
+      on jitpack.io resolving the git-commit pin over the network at build time.
+      The vendored jar is a shaded fat jar that already bundles Kawa; it has no
+      transitive compile dependencies, so nothing else needs to resolve.
+    -->
     <repositories>
         <repository>
-            <id>jitpack.io</id>
-            <url>https://jitpack.io</url>
+            <id>project-libs</id>
+            <url>file://${project.basedir}/libs/repo</url>
             <releases>
                 <enabled>true</enabled>
-                <updatePolicy>always</updatePolicy>
+                <updatePolicy>never</updatePolicy>
             </releases>
             <snapshots>
-                <enabled>true</enabled>
-                <updatePolicy>always</updatePolicy>
+                <enabled>false</enabled>
             </snapshots>
         </repository>
     </repositories>

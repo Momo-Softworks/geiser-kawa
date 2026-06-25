@@ -50,16 +50,23 @@ New tests expect a clean buffer to run."
       (file-exists-p geiser-kawa-deps-jar-path)))
 
  (it "can `run-kawa'"
+     ;; geiser 0.26+ renamed the REPL buffer; ask geiser for the name rather
+     ;; than hard-coding the old "* Kawa REPL *" (now "*Geiser Kawa REPL*").
      (expect
       (process-live-p (get-buffer-process
-                       (get-buffer "* Kawa REPL *")))))
+                       (get-buffer (geiser-repl--buffer-name 'kawa))))))
 
- (it "can `geiser-eval-buffer'"
+ (it "can eval and capture output"
+     ;; Use the synchronous protocol call instead of the asynchronous
+     ;; `geiser-eval-buffer': the latter inserts its "=> result" into the shared
+     ;; work buffer via a late callback, which used to poison the macroexpand
+     ;; spec that runs after it.
      (expect
-      (progn
-        (insert "(display 'foobar)")
-        (geiser-eval-buffer))
-      :to-equal '((result "") (output . "foobar"))))
+      (geiser-eval--retort-output
+       (geiser-eval--send/wait
+        (prin1-to-string
+         '(geiser:eval (interaction-environment) "(display 'foobar)"))))
+      :to-equal "foobar"))
 
  (it "can `geiser:autodoc'"
      ;; TODO: How to test directly
@@ -79,6 +86,17 @@ New tests expect a clean buffer to run."
         (insert "(when #t 'foo 'bar)")
         (goto-char (point-max))
         (geiser-expand-last-sexp)
+        ;; `geiser-expand-last-sexp' is asynchronous: a REPL callback fills the
+        ;; geiser debug buffer.  Wait (up to ~4s) for it instead of reading the
+        ;; buffer while it is still empty.
+        (let ((tries 0))
+          (while (and (< tries 40)
+                      (string= ""
+                               (geiser-debug--with-buffer
+                                (buffer-substring-no-properties
+                                 (point-min) (point-max)))))
+            (accept-process-output nil 0.1)
+            (setq tries (1+ tries))))
         (geiser-debug--with-buffer
          (buffer-substring-no-properties (point-min) (point-max))))
       :to-equal "(if #t (begin (quote foo) (quote bar)))"))

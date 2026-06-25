@@ -247,6 +247,70 @@ inside `CURSOR-STR'."
                      code-str cursor-index)))
     (geiser-kawa-devutil-exprtree--view expr-tree)))
 
+;;;; completion-at-point-function (composes with corfu/company/completion UI)
+
+(defun geiser-kawa-capf--candidates (compl-data)
+  "Extract the candidate strings from COMPL-DATA.
+COMPL-DATA is the alist returned by `geiser-kawa-devutil-complete--get-data'.
+For class members the \"completion-type\" is \"METHODS\" or \"FIELDS\" and the
+candidates live under \"names\"; for the symbols-plus-package-members case the
+\"completion-type\" is \"SYMBOLS_PLUS_PACKAGEMEMBERS\" and the candidates are
+\"symbol-names\" appended to \"package-members\"."
+  (let ((completion-type (cadr (assoc "completion-type" compl-data))))
+    (cond
+     ((or (equal completion-type "METHODS")
+          (equal completion-type "FIELDS"))
+      (cadr (assoc "names" compl-data)))
+     ((equal completion-type "SYMBOLS_PLUS_PACKAGEMEMBERS")
+      (append (cadr (assoc "symbol-names" compl-data))
+              (cadr (assoc "package-members" compl-data))))
+     (t nil))))
+
+(defun geiser-kawa-capf ()
+  "Java-aware Kawa completion as a `completion-at-point-functions' entry.
+Return (START END COLLECTION . PROPS) so that `completion-at-point' (and thus
+corfu/company) can offer the kawa-devutil candidates WITHOUT mutating the
+buffer, or nil when there is nothing to complete.  Unlike the interactive
+`geiser-kawa-devutil-complete-at-point', this never inserts text itself and
+never signals: a Kawa-side error (`peculiar-error') or a missing REPL simply
+yields nil so other capfs can run."
+  (condition-case nil
+      ;; Compute the region/cursor ourselves rather than via
+      ;; `--code-point-from-toplevel', which needs a fully balanced toplevel
+      ;; sexp.  While typing the expression is usually still open (no closing
+      ;; paren yet), so we take the text from the enclosing open paren to point
+      ;; and append the missing close parens to the STRING we send to Kawa (the
+      ;; buffer is never modified).  `syntax-ppss' gives both: the open-paren
+      ;; positions (nth 9) and the current depth (car) = how many ")" to add.
+      (let* ((ppss (syntax-ppss))
+             (depth (car ppss))
+             (opens (nth 9 ppss))
+             (reg-beg (if opens (car opens) (line-beginning-position)))
+             (code-str (concat (buffer-substring-no-properties reg-beg (point))
+                               (make-string (max 0 depth) ?\))))
+             (cursor-index (- (point) reg-beg))
+             (compl-data (geiser-kawa-devutil-complete--get-data
+                          code-str cursor-index))
+             (before-cursor (cadr (assoc "before-cursor" compl-data)))
+             (candidates (geiser-kawa-capf--candidates compl-data)))
+        (when candidates
+          (let* ((end (point))
+                 (start (- end (length (or before-cursor "")))))
+            (list start end candidates :exclusive 'no))))
+    ;; A capf must never error out; degrade to "no completion".
+    (error nil)))
+
+(defun geiser-kawa-capf-setup ()
+  "Add `geiser-kawa-capf' to the local `completion-at-point-functions'.
+Only does so when the current buffer's Geiser implementation is `kawa', so it
+never interferes with other Schemes.  Hung on `geiser-repl-mode-hook' and
+`scheme-mode-hook'."
+  (when (eq geiser-impl--implementation 'kawa)
+    (add-hook 'completion-at-point-functions #'geiser-kawa-capf nil t)))
+
+(add-hook 'geiser-repl-mode-hook #'geiser-kawa-capf-setup)
+(add-hook 'scheme-mode-hook #'geiser-kawa-capf-setup)
+
 (provide 'geiser-kawa-devutil-complete)
 
 ;;; geiser-kawa-devutil-complete.el ends here

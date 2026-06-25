@@ -4,12 +4,12 @@
 ;; Copyright (C) 2019, 2020 spellcard199 <spellcard199@protonmail.com>
 
 ;; Author: spellcard199 <spellcard199@protonmail.com>
-;; Maintainer: spellcard199 <spellcard199@protonmail.com>
+;; Maintainer: Momo Softworks
 ;; Keywords: languages, kawa, scheme, geiser
-;; Homepage: https://gitlab.com/emacs-geiser/kawa
-;; Package-Requires: ((emacs "26.1") (geiser "0.16"))
+;; Homepage: https://github.com/Momo-Softworks/geiser-kawa
+;; Package-Requires: ((emacs "27.1") (geiser "0.26"))
 ;; SPDX-License-Identifier: BSD-3-Clause
-;; Version: 0.0.1
+;; Version: 0.1.0
 
 ;; This file is NOT part of GNU Emacs.
 
@@ -37,6 +37,7 @@
 (require 'geiser-kawa-devutil-exprtree)
 (require 'geiser-kawa-arglist)
 (require 'geiser-kawa-ext-help)
+(require 'geiser-kawa-java-location)
 
 
 ;;; Code:
@@ -158,7 +159,7 @@ advice `run-kawa' overriding it with `geiser-kawa-run-kawa' without it
 becoming an infinite recursion."
   (interactive)
   (if (file-exists-p geiser-kawa-deps-jar-path)
-      (run-geiser 'kawa)
+      (geiser 'kawa)
     (when (y-or-n-p
            (concat
             "`geiser-kawa' depends on additional java libraries. "

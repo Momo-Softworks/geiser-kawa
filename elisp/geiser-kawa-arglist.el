@@ -15,6 +15,21 @@
 (require 'geiser-kawa-globals)
 (require 'compile)
 
+;; Extra classpath entries for user projects such as Forge/Minecraft.
+;; This can be set via .dir-locals.el using a safe local variable.
+;; Example:
+;; ((scheme-mode . ((geiser-kawa-extra-classpath . ("/path/to/forge.jar" "/path/to/classes")))))
+(defcustom geiser-kawa-extra-classpath nil
+  "List of extra classpath entries for Kawa REPL.
+Each entry should be a string naming a JAR file or directory.
+These are appended to the default classpath when constructing the
+`-Djava.class.path` argument.
+Set this variable in a project's .dir-locals.el to provide project‑specific
+dependencies such as Forge or Minecraft libraries."
+  :type '(repeat string)
+  :safe #'listp
+  :group 'geiser-kawa)
+
 ;;; Code:
 
 (defun geiser-kawa--binary ()
@@ -69,7 +84,12 @@ GEISER-KAWA-DEPS-JAR-PATH defaults to the value of
                   nil))
             nil)
           (list geiser-kawa-deps-jar-path))))
-    (mapconcat #'identity jars ":")))
+    ;; Append any user-specified extra classpath entries, then join into the
+    ;; single string `geiser-kawa-arglist--make-classpath-arg' expects, using
+    ;; the platform classpath separator.
+    (mapconcat #'identity
+               (append jars geiser-kawa-extra-classpath)
+               path-separator)))
 
 (defun geiser-kawa-arglist--make-classpath-arg (classpath)
   "Make -Djava.class.path argument from CLASSPATH.
