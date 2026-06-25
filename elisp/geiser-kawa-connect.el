@@ -4,20 +4,12 @@
 ;; Version: 0.1
 ;; Package-Requires: ((emacs "24.4") (geiser "0.26"))
 ;; Keywords: languages, scheme, kawa, geiser
-;; URL: https://example.com/geiser-kawa
 
 ;;; Commentary:
 ;;
-;; This module provides a simple command `geiser-kawa-connect' that
-;; connects Geiser to an already-running Kawa REPL listening on a TCP
-;; socket.  It is intended for use with the KawaCraft in-game REPL
-;; (client port 4243, server port 4242).  The command prompts for a
-;; host (default \"localhost\") and a port number, then invokes
-;; `geiser-connect' with the `kawa' implementation.
-;;
-;; Note: The external Kawa REPL does not have the `geiser:*' helper
-;; procedures loaded, so some Geiser features such as Java-aware
-;; completion or autodoc may be unavailable.
+;; Connect Geiser to an already-running Kawa TCP REPL (port 4243 standalone,
+;; 4242 in-game).  The command also associates the current buffer with the
+;; REPL so that completions and eval work immediately.
 
 ;;; Code:
 
@@ -26,16 +18,18 @@
 ;;;###autoload
 (defun geiser-kawa-connect (&optional host port)
   "Connect to a running Kawa REPL on HOST and PORT.
-HOST defaults to \"localhost\".  The command reads HOST and PORT
-interactively, then calls `geiser-connect' with the `kawa' implementation.
-
-If you are using the KawaCraft in-game REPL, the typical ports are
-client: 4243 and server: 4242."
+Associates the current buffer with the REPL for completions and eval."
   (interactive
    (list (read-string "Kawa host (default localhost): " nil nil "localhost")
          (read-number "Kawa port: ")))
   (require 'geiser-kawa)
-  (geiser-connect 'kawa (or host "localhost") port))
+  (geiser-connect 'kawa (or host "localhost") port)
+  ;; Associate the current buffer with the new REPL.
+  (when (derived-mode-p 'scheme-mode)
+    (setq geiser-impl--implementation 'kawa)
+    (require 'geiser-repl)
+    (geiser-repl--switch-to-buffer 'kawa)
+    (geiser-repl--switch-to-buffer 'kawa)))
 
 (provide 'geiser-kawa-connect)
 
