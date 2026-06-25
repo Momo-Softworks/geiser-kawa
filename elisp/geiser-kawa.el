@@ -163,7 +163,8 @@ MODULE is non-nil when completing a module name."
   "Display an error from the REPL.
 KEY is the error type, MSG is the message."
   (when (stringp msg)
-    (save-excursion (insert msg))
+    (save-current-buffer   ;; prevent background buffer from stealing focus
+      (save-excursion (insert msg)))
     (geiser-edit--buttonize-files))
   (and (not key) (not (zerop (length msg))) msg))
 
