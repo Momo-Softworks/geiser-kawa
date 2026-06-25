@@ -1,7 +1,8 @@
 ;;; geiser-kawa.el --- Kawa scheme support for Geiser -*- lexical-binding:t -*-
 
 ;; Copyright (C) 2018 Mathieu Lirzin <mthl@gnu.org>
-;; Copyright (C) 2019, 2020 spellcard199 <spellcard199@protonmail.com>
+;; Copyright (C) 2019-2020 spellcard199 <spellcard199@protonmail.com>
+;; Copyright (C) 2025 Momo Softworks
 
 ;; Author: spellcard199 <spellcard199@protonmail.com>
 ;; Maintainer: Momo Softworks
@@ -9,15 +10,23 @@
 ;; Homepage: https://github.com/Momo-Softworks/geiser-kawa
 ;; Package-Requires: ((emacs "27.1") (geiser "0.26"))
 ;; SPDX-License-Identifier: BSD-3-Clause
-;; Version: 0.1.0
-
-;; This file is NOT part of GNU Emacs.
+;; Version: 0.2.0
 
 ;;; Commentary:
-;; geiser-kawa extends the `geiser' package to support the Kawa
-;; scheme implementation.
+;; geiser-kawa extends Geiser to support the Kawa Scheme implementation.
+;; Follows the same pattern as geiser-guile: one file, activate-and-go.
+;;
+;; Two ways to start a REPL:
+;;   M-x run-kawa              — local Kawa REPL (needs java/kawa on PATH)
+;;   M-x geiser-kawa-connect   — connect to an already-running TCP REPL
+;;                                 (e.g. make repl on port 4243)
+;;
+;; The Kawa REPL must have the geiser protocol procedures loaded.
+;; The included jar (kawa-geiser) provides them; it's loaded at startup
+;; via the --arglist (require <kawageiser.Geiser>).
 
-
+;;; Code:
+
 (require 'geiser-base)
 (require 'geiser-custom)
 (require 'geiser-syntax)
@@ -25,146 +34,203 @@
 (require 'geiser-connection)
 (require 'geiser-eval)
 (require 'geiser-edit)
+(require 'geiser-repl)
 (require 'geiser)
-
+(require 'geiser-impl)
 (require 'compile)
 (require 'info-look)
 (require 'cl-lib)
 
-(require 'geiser-kawa-globals)
-(require 'geiser-kawa-deps)
-(require 'geiser-kawa-devutil-complete)
-(require 'geiser-kawa-devutil-exprtree)
-(require 'geiser-kawa-arglist)
-(require 'geiser-kawa-ext-help)
-(require 'geiser-kawa-java-location)
-(require 'geiser-kawa-connect)
+;; ── Customization ──────────────────────────────────────────────────────
 
-
-;;; Code:
-;;; REPL support:
+(defgroup geiser-kawa nil
+  "Customization for Geiser's Kawa Scheme flavour."
+  :group 'geiser)
+
+(geiser-custom--defcustom geiser-kawa-binary "kawa"
+  "Name to use to call the Kawa Scheme executable when starting a REPL."
+  :type '(choice string (repeat string))
+  :group 'geiser-kawa)
+
+;; Package directory (for resolving the fat jar path)
+(defconst geiser-kawa-elisp-dir
+  (file-name-directory (or load-file-name (buffer-file-name)))
+  "Directory containing geiser-kawa's Elisp files.")
+
+(defconst geiser-kawa-dir
+  (if (string-suffix-p "elisp/" geiser-kawa-elisp-dir)
+      (expand-file-name "../" geiser-kawa-elisp-dir)
+    geiser-kawa-elisp-dir)
+  "Directory where geiser-kawa is located.")
+
+(defcustom geiser-kawa-deps-jar-path
+  (expand-file-name
+   "./target/kawa-geiser-0.1-SNAPSHOT-jar-with-dependencies.jar"
+   geiser-kawa-dir)
+  "Path to the kawa-geiser fat jar."
+  :type 'string
+  :group 'geiser-kawa)
+
+(defcustom geiser-kawa-use-included-kawa nil
+  "Use the Kawa bundled in the geiser-kawa fat jar instead of `kawa' binary."
+  :type 'boolean
+  :group 'geiser-kawa)
+
+;; Register with customize system
+(custom-add-load 'geiser-kawa (symbol-name 'geiser-kawa))
+(custom-add-load 'geiser      (symbol-name 'geiser-kawa))
+
+;; ── Prompt ─────────────────────────────────────────────────────────────
+
+(defconst geiser-kawa--prompt-regexp "#|kawa:[0-9]+|# "
+  "Regexp matching the Kawa REPL prompt.")
+
+;; ── Binary & arglist ──────────────────────────────────────────────────
+
+(defun geiser-kawa--binary ()
+  "Return the binary to call to start Kawa."
+  (if geiser-kawa-use-included-kawa
+      "java"
+    (if (listp geiser-kawa-binary)
+        (car geiser-kawa-binary)
+      geiser-kawa-binary)))
+
+(defun geiser-kawa--arglist ()
+  "Return arguments to pass to Kawa at startup.
+Loads the geiser protocol procedures via (require <kawageiser.Geiser>)."
+  `("console:use-jline=no"
+    "--console"
+    "-e" "(require <kawageiser.Geiser>)"
+    "--"))
+
+;; ── Classpath helpers ──────────────────────────────────────────────────
+
+(defun geiser-kawa--extra-classpath ()
+  "Return extra classpath entries for the Kawa REPL.
+Includes the kawa-geiser fat jar and any jars from
+`geiser-kawa-extra-classpath'."
+  (delq nil
+        (append (when (file-exists-p geiser-kawa-deps-jar-path)
+                  (list geiser-kawa-deps-jar-path))
+                (when (boundp 'geiser-kawa-extra-classpath)
+                  geiser-kawa-extra-classpath))))
+
+(defun geiser-kawa--java-arglist ()
+  "Return java invocation arguments when using the included Kawa."
+  (let ((cp (string-join (geiser-kawa--extra-classpath)
+                          path-separator)))
+    `(,(concat "-cp" cp)
+      "kawa.repl"
+      ,@(geiser-kawa--arglist))))
+
+;; ── Version ────────────────────────────────────────────────────────────
+
+(defun geiser-kawa--version-command (_binary)
+  "Return a scheme form that yields the version string."
+  "(system-reactive-string \"kawa\")")
+
+;; ── Geiser protocol ────────────────────────────────────────────────────
 
 (defun geiser-kawa--geiser-procedure (proc &rest args)
-  "Geiser's marshall-procedure for `geiser-kawa'.
-Argument PROC passed by Geiser.
-Optional argument ARGS passed by Geiser."
-
+  "Geiser's marshall-procedure: format a geiser protocol call for Kawa.
+PROC is the procedure name.  ARGS are the arguments."
   (cl-case proc
     ((eval compile)
-     (format
-      "(geiser:eval (interaction-environment) %S)"
-      (cadr args)))
-
+     (format "(geiser:eval (interaction-environment) %S)" (cadr args)))
     ((load-file compile-file)
      (format "(geiser:load-file %s)" (car args)))
-
     ((no-values) "(geiser:no-values)")
+    (t (let ((form (mapconcat #'identity args " ")))
+         (format "(geiser:%s %s)" proc form)))))
 
-    (t
-     (let ((form (mapconcat #'identity args " ")))
-       (format "(geiser:%s %s)" proc form)))))
-
-;; TODO
-;; (defun geiser-kawa--find-module (&optional module))
-
-;; Doesn't work:
-;; (defun geiser-kawa--symbol-begin (module)
-;;  (save-excursion (skip-syntax-backward "^|#") (point)))
-;; TODO: see if it needs improvements.
 (defun geiser-kawa--symbol-begin (module)
-  "Needed for completion.
-Copied from geiser-chibi.el, geiser-guile.el, which are identical to
-each other.
-Argument MODULE argument passed by Geiser."
+  "Find the start of the symbol at point for completion.
+MODULE is non-nil when completing a module name."
   (if module
       (max (save-excursion (beginning-of-line) (point))
            (save-excursion (skip-syntax-backward "^(>") (1- (point))))
     (save-excursion (skip-syntax-backward "^'-()>") (point))))
 
 (defun geiser-kawa--import-command (module)
-  "Return command used to import MODULEs."
+  "Return command to import MODULE."
   (format "(import %s)" module))
 
 (defun geiser-kawa--exit-command ()
-  "Command to send to exit from Kawa REPL."
+  "Command to exit the Kawa REPL."
   "(exit 0)")
 
-
-;;; REPL startup
-
-
-;;; Error display
-
-;; TODO
-(defun geiser-kawa--enter-debugger ()
-  "TODO.")
-
 (defun geiser-kawa--display-error (_module key msg)
-  "Needed to show output (besides result).
-Modified from geiser-guile.el.
-Argument MODULE is passed by Geiser.
-Argument KEY is passed by Geiser.
-Argument MSG is passed by Geiser."
+  "Display an error from the REPL.
+KEY is the error type, MSG is the message."
   (when (stringp msg)
     (save-excursion (insert msg))
     (geiser-edit--buttonize-files))
   (and (not key) (not (zerop (length msg))) msg))
 
-
-;;; Implementation definition:
+(defun geiser-kawa--repl-startup (_remote)
+  "Called after the REPL has been initialized.
+REMOTE is non-nil for remote (TCP) connections."
+  nil)
+
+;; ── Implementation definition ──────────────────────────────────────────
 
 (define-geiser-implementation kawa
   (unsupported-procedures '(find-file
-                            symbol-location
                             module-location
+                            symbol-location
                             symbol-documentation
                             module-exports
-                            callers
-                            callees
+                            callers callees
                             generic-methods))
   (binary geiser-kawa--binary)
-  (arglist geiser-kawa-arglist)
-  (version-command geiser-kawa--version-command)
   (repl-startup geiser-kawa--repl-startup)
   (prompt-regexp geiser-kawa--prompt-regexp)
   (debugger-prompt-regexp nil)
   (marshall-procedure geiser-kawa--geiser-procedure)
-  ;; TODO
-  ;; (find-module geiser-kawa--find-module nil)
   (exit-command geiser-kawa--exit-command)
   (import-command geiser-kawa--import-command)
   (find-symbol-begin geiser-kawa--symbol-begin)
   (display-error geiser-kawa--display-error)
-  (case-sensitive nil)
-  (external-help geiser-kawa-manual--look-up))
+  (version-command geiser-kawa--version-command)
+  (case-sensitive nil))
 
-;; > usually when you add to auto-mode-alists the regular expression
-;; > should resemble, e.g., \\.scm\\' rather than \\.scm$ by
-;; > convention.
-;; Source:
-;;  https://github.com/melpa/melpa/pull/6858#issuecomment-621596527
 (geiser-activate-implementation 'kawa)
 
-;; Check for kawa-geiser jar each time `run-kawa' is called.
+;; ── run-kawa override ──────────────────────────────────────────────────
+
+;;;###autoload
+(autoload 'run-kawa "geiser-kawa" "Start a Geiser Kawa Scheme REPL." t)
+
+;;;###autoload
+(autoload 'switch-to-kawa "geiser-kawa"
+  "Start a Geiser Kawa Scheme REPL, or switch to a running one." t)
 
 (defun geiser-kawa-run-kawa ()
-  "Alternative to `run-kawa' that also does check for dependencies.
-Compared to the `run-kawa' function defined by
-`define-geiser-implementation', this function also prompts the user to
-package java dependencies if the file at `geiser-kawa-deps-jar-path'
-does not exists.
-Since both here and in `geiser-kawa-deps--run-kawa--compile-hook' we
-are calling `run-geiser' instead of `run-kawa' directly, one can also
-advice `run-kawa' overriding it with `geiser-kawa-run-kawa' without it
-becoming an infinite recursion."
+  "Start a Kawa REPL.  If the deps jar is missing, prompt to build it."
   (interactive)
   (if (file-exists-p geiser-kawa-deps-jar-path)
       (geiser 'kawa)
     (when (y-or-n-p
-           (concat
-            "`geiser-kawa' depends on additional java libraries. "
-            "Do you want to download and compile them now?"))
-      (geiser-kawa-deps-mvnw-package--and-run-kawa))))
+           (concat "geiser-kawa depends on additional java libraries. "
+                   "Do you want to download and compile them now?"))
+      (let ((default-directory geiser-kawa-dir)
+            (buf (compile "./mvnw package")))
+        (when buf
+          (switch-to-buffer-other-window buf)
+          (goto-char (point-max))
+          (message "After the build finishes, run M-x run-kawa again."))))))
+
+;; ── Optional modules ───────────────────────────────────────────────────
+;; These are loaded on demand, not at startup, to keep things minimal.
+
+(defun geiser-kawa--maybe-load-optional ()
+  "Load optional geiser-kawa modules if available."
+  (dolist (mod '(geiser-kawa-connect
+                 geiser-kawa-java-location
+                 geiser-kawa-devutil-complete))
+    (require mod nil t)))
+
+(add-hook 'geiser-repl-mode-hook #'geiser-kawa--maybe-load-optional)
 
 (provide 'geiser-kawa)
 
