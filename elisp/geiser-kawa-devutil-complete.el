@@ -301,10 +301,8 @@ yields nil so other capfs can run."
     (error nil)))
 
 (defun geiser-kawa-capf-setup ()
-  "Add `geiser-kawa-capf' to the local `completion-at-point-functions'.
-Only does so when the current buffer's Geiser implementation is `kawa', so it
-never interferes with other Schemes.  Hung on `geiser-repl-mode-hook' and
-`scheme-mode-hook'."
+  "Add `geiser-kawa-capf' to the front of `completion-at-point-functions'.
+Only does so when the current buffer's Geiser implementation is `kawa'."
   (when (eq geiser-impl--implementation 'kawa)
     (add-hook 'completion-at-point-functions #'geiser-kawa-capf nil t)))
 
