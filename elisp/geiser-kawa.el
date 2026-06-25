@@ -222,16 +222,10 @@ REMOTE is non-nil for remote (TCP) connections."
           (message "After the build finishes, run M-x run-kawa again."))))))
 
 ;; ── Optional modules ───────────────────────────────────────────────────
-;; These are loaded on demand, not at startup, to keep things minimal.
-
-(defun geiser-kawa--maybe-load-optional ()
-  "Load optional geiser-kawa modules if available."
-  (dolist (mod '(geiser-kawa-connect
-                 geiser-kawa-java-location
-                 geiser-kawa-devutil-complete))
-    (require mod nil t)))
-
-(add-hook 'geiser-repl-mode-hook #'geiser-kawa--maybe-load-optional)
+;; Loaded eagerly so hooks register before buffers open.
+(require 'geiser-kawa-connect nil t)
+(require 'geiser-kawa-java-location nil t)
+(require 'geiser-kawa-devutil-complete nil t)
 
 (provide 'geiser-kawa)
 
