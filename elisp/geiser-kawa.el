@@ -78,7 +78,13 @@ Recommended to be set via .dir-locals.el in your project root."
      (format "(geiser-load-file \"%s\")" (car args)))
     ((no-values) "(geiser-no-values)")
     (t
-     (let ((form (mapconcat #'identity args " ")))
+     ;; Quote string args so they reach Scheme as strings, not bare symbols.
+     ;; e.g. completions "display" → (geiser-completions "display")
+     (let ((form (mapconcat (lambda (a)
+                              (if (stringp a)
+                                  (format "%S" a)
+                                (format "%s" a)))
+                            args " ")))
        (format "(geiser-%s %s)" proc form)))))
 
 ;;; Modules and environments
@@ -140,6 +146,10 @@ Recommended to be set via .dir-locals.el in your project root."
   "Start a Kawa REPL connected to a remote process."
   (interactive)
   (geiser-connect 'kawa))
+
+;;;###autoload
+(defalias 'geiser-kawa-connect 'connect-to-kawa
+  "Connect to a running Kawa REPL.  Alias for `connect-to-kawa'.")
 
 (geiser-activate-implementation 'kawa)
 
