@@ -106,6 +106,25 @@
 (let ((loc (geiser-symbol-location "java.lang.String")))
   (assert-equal "no source for String" #f loc))
 
+;; ================ geiser protocol simulation ================
+(display "--- protocol simulation ---\n")
+
+;; This is exactly what geiser sends for completions:
+;; (:eval (:ge completions "prefix")) goes through geiser-eval--eval
+;; which calls geiser-eval--form('eval, module, scheme-str(form))
+;; The final expression sent to Kawa is:
+;; (geiser-eval #f "(geiser-completions \"prefix\")")
+
+(let* ((val (eval (read (open-input-string
+                         "(geiser-completions \"java.lang.String:valu\")"))
+                  (interaction-environment)))
+       (out (open-output-string)))
+  (write val out)
+  (let ((rs (->string (get-output-string out))))
+    (assert-true "protocol: result is list" (>= (invoke rs 'indexOf "(") 0))
+    (assert-true "protocol: has valueOf"
+                 (>= (invoke rs 'indexOf "valueOf") 0))))
+
 ;; ================ summary ================
 (newline)
 (display "=== ")
