@@ -4,18 +4,23 @@
           (kawa base)
           (geiser classpath))
   (begin
-    (define (java-interop-prefix? prefix :: String)
-      (or (>= (invoke prefix 'indexOf ":") 0)
-          (>= (invoke prefix 'indexOf ".") 0)))
+    (define (->string x) :: String
+      (invoke x 'toString))
+
+    (define (java-interop-prefix? prefix)
+      (let ((s (->string prefix)))
+        (or (>= (invoke s 'indexOf ":") 0)
+            (>= (invoke s 'indexOf ".") 0))))
 
     ;; Complete Java class members (methods, fields) via reflection.
-    (define (complete-java-members prefix :: String)
-      (let ((colon-pos (invoke prefix 'lastIndexOf ":")))
+    (define (complete-java-members prefix)
+      (let* ((s (->string prefix))
+             (colon-pos (invoke s 'lastIndexOf ":")))
         (if (< colon-pos 0)
             '()
-            (let ((class-name (invoke prefix 'substring 0 colon-pos))
-                  (member-prefix (invoke prefix 'substring (+ colon-pos 1)
-                                       (invoke prefix 'length))))
+            (let ((class-name (invoke s 'substring 0 colon-pos))
+                  (member-prefix (invoke s 'substring (+ colon-pos 1)
+                                       (invoke s 'length))))
               (guard (exn (else '()))
                 (let* ((cls :: java.lang.Class
                             (java.lang.Class:forName class-name))
@@ -49,7 +54,8 @@
 
     ;; Complete Scheme symbols.
     (define (complete-symbols prefix)
-      (let* ((env (interaction-environment))
+      (let* ((s (->string prefix))
+             (env (interaction-environment))
              (candidates '())
              (limit 100))
         (guard (exn (else '()))
@@ -58,7 +64,7 @@
               (when (and (iter:hasNext) (< (length candidates) limit))
                 (let* ((loc (iter:next))
                        (sym (invoke (invoke loc 'getKeySymbol) 'toString)))
-                  (when (invoke sym 'startsWith prefix)
+                  (when (invoke sym 'startsWith s)
                     (set! candidates (cons sym candidates))))
                 (loop)))))
         (java.util.Collections:sort candidates)
