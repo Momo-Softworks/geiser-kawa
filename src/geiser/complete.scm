@@ -34,23 +34,23 @@
                 (let* ((cls :: java.lang.Class
                             (java.lang.Class:forName class-name))
                        (methods :: java.lang.reflect.Method[]
-                                (cls:getMethods))
+                                (invoke cls 'getMethods))
                        (fields :: java.lang.reflect.Field[]
-                               (cls:getFields))
+                               (invoke cls 'getFields))
                        (candidates '()))
                   (do ((i :: int 0 (+ i 1)))
                       ((>= i (java.lang.reflect.Array:getLength methods)))
                     (let* ((m :: java.lang.reflect.Method
                               (java.lang.reflect.Array:get methods i))
-                           (name :: String (m:getName)))
+                           (name :: String (invoke m 'getName)))
                       (when (str-starts-with? name member-prefix)
                         (set! candidates
                               (cons (string-append name "("
                                     (string-join
                                      (map (lambda (p :: java.lang.Class)
-                                            (p:getSimpleName))
+                                            (invoke p 'getSimpleName))
                                           (vector->list
-                                           (m:getParameterTypes)))
+                                           (invoke m 'getParameterTypes)))
                                      ", ")
                                     ")")
                                     candidates)))))
@@ -58,7 +58,7 @@
                       ((>= i (java.lang.reflect.Array:getLength fields)))
                     (let* ((f :: java.lang.reflect.Field
                               (java.lang.reflect.Array:get fields i))
-                           (name :: String (f:getName)))
+                           (name :: String (invoke f 'getName)))
                       (when (str-starts-with? name member-prefix)
                         (set! candidates (cons name candidates)))))
                   candidates))))))
