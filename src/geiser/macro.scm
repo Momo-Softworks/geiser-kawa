@@ -1,0 +1,20 @@
+(define-library (geiser macro)
+  (export geiser-macroexpand)
+  (import (scheme write)
+          (kawa base))
+  (begin
+    ;; Expand a Scheme macro form without evaluating it.
+    (define (geiser-macroexpand form . rest)
+      (guard (exn (else "ERROR"))
+        (let* ((env (interaction-environment))
+               (expr (if (string? form)
+                         (read (open-input-string form))
+                         form))
+               (expander (invoke env 'get 'macroexpand))
+               (expanded (if (gnu.mapping.Procedure? expander)
+                             (expander expr)
+                             expr)))
+          ;; Return expanded form as its written representation.
+          (let ((out (open-output-string)))
+            (write expanded out)
+            (get-output-string out)))))))
