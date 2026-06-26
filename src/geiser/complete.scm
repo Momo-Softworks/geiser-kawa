@@ -1,27 +1,14 @@
 (define-library (geiser complete)
-  (export geiser-completions)
+  (export geiser-completions
+          ;; Exported for testing:
+          complete-java-members
+          complete-symbols
+          complete-classes)
   (import (scheme write)
           (kawa base)
+          (geiser string-util)
           (geiser classpath))
   (begin
-    ;; Use integer char codes to avoid Kawa 3.1.1 #\: bug.
-    (define COLON (as int 58))
-    (define DOT   (as int 46))
-
-    (define (str-index ch str :: String) :: int
-      (invoke str 'indexOf ch))
-
-    (define (str-last-index ch str :: String) :: int
-      (invoke str 'lastIndexOf ch))
-
-    (define (str-starts-with? s :: String prefix :: String) :: boolean
-      (invoke s 'startsWith prefix))
-
-    (define (java-interop-prefix? prefix)
-      (let ((s (->string prefix)))
-        (or (>= (str-index COLON s) 0)
-            (>= (str-index DOT s) 0))))
-
     (define (complete-java-members prefix)
       (let* ((s (->string prefix))
              (colon-pos (str-last-index COLON s)))
@@ -84,5 +71,5 @@
       (if (java-interop-prefix? prefix)
           (complete-java-members prefix)
           (append (complete-symbols prefix)
-                  (complete-classes prefix)))))
-    )
+                  (complete-classes prefix))))
+    ))

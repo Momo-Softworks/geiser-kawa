@@ -1,11 +1,10 @@
 (define-library (geiser classpath)
-  (export ensure-class-cache complete-classes *class-cache* ->string)
-  (import (kawa base))
+  (export ensure-class-cache complete-classes *class-cache*
+          scan-dir scan-zip)
+  (import (kawa base)
+          (geiser string-util))
   (begin
     (define *class-cache* #f)
-
-    (define (->string x) :: String
-      (java.lang.String:new (invoke x 'toString)))
 
     (define (ensure-class-cache)
       (when (not *class-cache*)
