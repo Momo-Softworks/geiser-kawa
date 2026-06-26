@@ -1,5 +1,3 @@
-.cask/
-.mvn/
-target/
 *.elc
 *.class
+.cask/
