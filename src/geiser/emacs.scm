@@ -13,6 +13,7 @@
   (import (scheme base)
           (geiser eval)
           (geiser complete)
+          (geiser classpath)
           (geiser doc)
           (geiser modules)
           (geiser macro)

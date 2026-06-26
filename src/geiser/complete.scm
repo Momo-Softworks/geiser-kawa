@@ -1,7 +1,8 @@
 (define-library (geiser complete)
   (export geiser-completions)
   (import (scheme write)
-          (kawa base))
+          (kawa base)
+          (geiser classpath))
   (begin
     (define (java-interop-prefix? prefix)
       (or (string-contains prefix ":")
@@ -45,25 +46,6 @@
                       (when (string-prefix? member-prefix name)
                         (set! candidates (cons name candidates)))))
                   candidates))))))
-
-    ;; Try to resolve a Java class by prefix.
-    (define (complete-classes prefix)
-      (let ((candidates '()))
-        ;; Common Java/Minecraft packages
-        (for-each
-         (lambda (pkg)
-           (let ((full (string-append pkg prefix)))
-             (guard (exn (else #f))
-               (java.lang.Class:forName full)
-               (set! candidates (cons full candidates)))))
-         '("java.lang." "java.util." "java.io."
-           "cpw.mods.fml.common."
-           "cpw.mods.fml.common.registry."
-           "net.minecraft.init."
-           "net.minecraft.block."
-           "net.minecraft.item."))
-        (java.util.Collections:sort candidates)
-        candidates))
 
     ;; Complete Scheme symbols.
     (define (complete-symbols prefix)
