@@ -83,13 +83,9 @@ Recommended to be set via .dir-locals.el in your project root."
      (format "(geiser-load-file \"%s\")" (car args)))
     ((no-values) "(geiser-no-values)")
     (t
-     ;; Quote string args so they reach Scheme as strings, not bare symbols.
-     ;; e.g. completions "display" → (geiser-completions "display")
-     (let ((form (mapconcat (lambda (a)
-                              (if (stringp a)
-                                  (format "%S" a)
-                                (format "%s" a)))
-                            args " ")))
+     ;; Args are already Schemified by geiser-eval--scheme-str (%S).
+     ;; Use %s (not %S) to avoid double-quoting.
+     (let ((form (mapconcat #'identity args " ")))
        (format "(geiser-%s %s)" proc form)))))
 
 ;;; Modules and environments
