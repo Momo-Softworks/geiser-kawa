@@ -89,9 +89,27 @@
       (let ((candidates '()) (limit 100))
         (for-each
          (lambda (name)
-           (when (and (< (length candidates) limit)
-                      (invoke (->string name) 'startsWith prefix))
-             (set! candidates (cons name candidates))))
+           (when (< (length candidates) limit)
+             (let ((sname (->string name)))
+               (when (invoke sname 'startsWith prefix)
+                 (set! candidates (cons name candidates)))
+               ;; Also match unqualified name (after last dot).
+               (let ((dot (invoke sname 'lastIndexOf ".")))
+                 (when (and (> dot -1)
+                            (invoke sname 'substring (+ dot 1))
+                            (invoke
+                             (invoke sname 'substring (+ dot 1))
+                             'startsWith prefix))
+                   (set! candidates
+                         (cons (invoke sname 'substring (+ dot 1))
+                               candidates)))))))
          *class-cache*)
         (java.util.Collections:sort candidates)
-        candidates))))
+        ;; Deduplicate manually (Kawa 3.1.1 has no delete-duplicates).
+        (let dedup ((in candidates) (out '()))
+          (if (null? in)
+              (reverse out)
+              (dedup (cdr in)
+                     (if (and (pair? out) (string=? (car in) (car out)))
+                         out
+                         (cons (car in) out)))))))))
