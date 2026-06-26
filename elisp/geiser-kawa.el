@@ -7,7 +7,7 @@
 ;; A modern, pure-Scheme backend for Kawa in Geiser.
 ;; Defers introspection, evaluation, and completion directly
 ;; to Kawa Scheme instead of relying on a Java middleware layer.
-;; Scheme sources live in src/geiser/ and are loaded via --libdir.
+;; Scheme sources live in src/geiser/ and are loaded via -Dkawa.import.path.
 
 ;;; Code:
 
