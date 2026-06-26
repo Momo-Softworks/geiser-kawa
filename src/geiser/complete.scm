@@ -1,7 +1,6 @@
 (define-library (geiser complete)
   (export geiser-completions)
-  (import (scheme base)
-          (scheme write)
+  (import (scheme write)
           (kawa base))
   (begin
 
@@ -64,12 +63,15 @@
         ;; so we use the environment's defineLocation enumerator.
         (guard (exn (else '()))
           (let ((iter (env:enumerateAllLocations)))
-            (while (iter:hasNext)
-              (let* ((loc (iter:next))
-                     (sym (invoke (invoke loc 'getKeySymbol) 'toString)))
-                (when (string-prefix? prefix sym)
-                  (set! candidates (cons sym candidates)))))))
-        (sort candidates string<?)))
+            (let loop ()
+              (when (iter:hasNext)
+                (let* ((loc (iter:next))
+                       (sym (invoke (invoke loc 'getKeySymbol) 'toString)))
+                  (when (string-prefix? prefix sym)
+                    (set! candidates (cons sym candidates))))
+                (loop)))))
+        (java.util.Collections:sort candidates)
+        candidates))
 
     (define (geiser-completions prefix)
       (let ((candidates
@@ -80,4 +82,4 @@
                  (string-join (map (lambda (s) (string-append "\"" s "\""))
                                    candidates)
                               " ")
-                 ")\n"))))))
+                 ")\n")))))

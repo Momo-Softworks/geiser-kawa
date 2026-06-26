@@ -1,7 +1,6 @@
 (define-library (geiser macro)
   (export geiser-macroexpand)
-  (import (scheme base)
-          (scheme write)
+  (import (scheme write)
           (kawa base))
   (begin
 

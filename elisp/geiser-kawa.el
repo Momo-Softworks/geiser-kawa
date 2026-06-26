@@ -60,7 +60,7 @@ Recommended to be set via .dir-locals.el in your project root."
                                  path-separator)))
          (cp-flags (when cp-string (list "--classpath" cp-string))))
     `(,@(and (listp geiser-kawa-binary) (cdr geiser-kawa-binary))
-      "--libdir" ,geiser-kawa-scheme-dir
+      ,(concat "-Dkawa.import.path=" geiser-kawa-scheme-dir)
       ,@cp-flags)))
 
 (defconst geiser-kawa--prompt-regexp "^#|kawa:[0-9]+|# ")
