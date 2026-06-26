@@ -3,16 +3,15 @@
   (import (scheme write)
           (kawa base))
   (begin
-    ;; Check if a prefix looks like a Java interop call.
     (define (java-interop-prefix? prefix)
       (or (string-contains prefix ":")
           (string-contains prefix ".")))
 
-    ;; Complete Java class members using reflection.
-    (define (complete-java prefix)
-      (let* ((colon-pos (string-index-right prefix #\:))
-             (dot-only  (and (not colon-pos) (string-index-right prefix #\.))))
-        (if colon-pos
+    ;; Complete Java class members (methods, fields) via reflection.
+    (define (complete-java-members prefix)
+      (let ((colon-pos (string-index-right prefix #\:)))
+        (if (not colon-pos)
+            '()
             (let ((class-name (substring prefix 0 colon-pos))
                   (member-prefix (substring prefix (+ colon-pos 1)
                                            (string-length prefix))))
@@ -45,14 +44,28 @@
                            (name :: String (f:getName)))
                       (when (string-prefix? member-prefix name)
                         (set! candidates (cons name candidates)))))
-                  candidates)))
-            (guard (exn (else '()))
-              (let ((pkg (java.lang.Package:getPackage prefix)))
-                (if (not (eq? pkg #!null))
-                    '()
-                    (complete-symbols prefix))))))))
+                  candidates))))))
 
-    ;; Complete Scheme symbols from the interaction environment.
+    ;; Try to resolve a Java class by prefix.
+    (define (complete-classes prefix)
+      (let ((candidates '()))
+        ;; Common Java/Minecraft packages
+        (for-each
+         (lambda (pkg)
+           (let ((full (string-append pkg prefix)))
+             (guard (exn (else #f))
+               (java.lang.Class:forName full)
+               (set! candidates (cons full candidates)))))
+         '("java.lang." "java.util." "java.io."
+           "cpw.mods.fml.common."
+           "cpw.mods.fml.common.registry."
+           "net.minecraft.init."
+           "net.minecraft.block."
+           "net.minecraft.item."))
+        (java.util.Collections:sort candidates)
+        candidates))
+
+    ;; Complete Scheme symbols.
     (define (complete-symbols prefix)
       (let* ((env (interaction-environment))
              (candidates '()))
@@ -70,6 +83,6 @@
 
     (define (geiser-completions prefix)
       (if (java-interop-prefix? prefix)
-          (complete-java prefix)
-          (complete-symbols prefix)))
-    )
+          (complete-java-members prefix)
+          (append (complete-symbols prefix)
+                  (complete-classes prefix))))))
