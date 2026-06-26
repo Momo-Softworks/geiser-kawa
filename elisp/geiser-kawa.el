@@ -73,7 +73,10 @@ Recommended to be set via .dir-locals.el in your project root."
   "Transform PROC in string for a scheme procedure using ARGS."
   (cl-case proc
     ((eval compile)
-     (format "(geiser-eval %s '%s)"
+     ;; Use %S (not '%s) so the form is sent as a string, not quoted.
+     ;; Quoting prevents function calls like (geiser-completions ...)
+     ;; from being evaluated — they become literal lists.
+     (format "(geiser-eval %s %S)"
              (or (car args) "#f")
              (mapconcat #'identity (cdr args) " ")))
     ((load-file compile-file)
