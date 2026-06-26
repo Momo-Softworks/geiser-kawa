@@ -7,10 +7,13 @@
           geiser-autodoc
           geiser-object-signature
           geiser-macroexpand
-          geiser-module-exports)
+          geiser-module-exports
+          geiser-symbol-location
+          geiser-module-location)
   (import (scheme base)
           (geiser eval)
           (geiser complete)
           (geiser doc)
           (geiser modules)
-          (geiser macro)))
+          (geiser macro)
+          (geiser location)))
