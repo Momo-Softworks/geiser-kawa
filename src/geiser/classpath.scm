@@ -1,5 +1,5 @@
 (define-library (geiser classpath)
-  (export ensure-class-cache complete-classes *class-cache*)
+  (export ensure-class-cache complete-classes *class-cache* ->string)
   (import (kawa base))
   (begin
     (define *class-cache* #f)
