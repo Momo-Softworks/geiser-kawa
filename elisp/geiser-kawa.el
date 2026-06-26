@@ -141,7 +141,6 @@ Recommended to be set via .dir-locals.el in your project root."
   (interactive)
   (geiser-connect 'kawa))
 
-;;;###autoload
 (geiser-activate-implementation 'kawa)
 
 ;;;###autoload
