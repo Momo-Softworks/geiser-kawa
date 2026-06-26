@@ -32,7 +32,7 @@
                            (name :: String (invoke m 'getName)))
                       (when (str-starts-with? name member-prefix)
                         (set! candidates
-                              (cons (string-append name "("
+                              (cons (string-append class-name ":" name "("
                                     (string-join
                                      (map (lambda (p :: java.lang.Class)
                                             (invoke p 'getSimpleName))
@@ -47,7 +47,9 @@
                               (java.lang.reflect.Array:get fields i))
                            (name :: String (invoke f 'getName)))
                       (when (str-starts-with? name member-prefix)
-                        (set! candidates (cons name candidates)))))
+                        (set! candidates
+                              (cons (string-append class-name ":" name)
+                                    candidates)))))
                   candidates))))))
 
     (define (complete-symbols prefix)

@@ -70,7 +70,9 @@
 (let ((c (complete-java-members "java.lang.String:valu")))
   (assert-true "members has valueOf"
                (any (lambda (s) (invoke (->string s) 'contains "valueOf")) c))
-  (assert-approx "members count" (length c) 9 5))
+  (assert-approx "members count" (length c) 9 5)
+  (assert-true "members prefixed with class"
+               (str-starts-with? (->string (car c)) "java.lang.String:")))
 
 (let ((c (complete-java-members "java.lang.String:length")))
   (assert-true "members has length()"
