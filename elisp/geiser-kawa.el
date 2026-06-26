@@ -61,7 +61,8 @@ Recommended to be set via .dir-locals.el in your project root."
          (cp-flags (when cp-string (list "--classpath" cp-string))))
     `(,@(and (listp geiser-kawa-binary) (cdr geiser-kawa-binary))
       ,(concat "-Dkawa.import.path=" geiser-kawa-scheme-dir)
-      ,@cp-flags)))
+      ,@cp-flags
+      "-e" "(import (geiser emacs))")))
 
 (defconst geiser-kawa--prompt-regexp "^#|kawa:[0-9]+|# ")
 
