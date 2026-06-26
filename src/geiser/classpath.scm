@@ -86,10 +86,11 @@
 
     (define (complete-classes prefix)
       (ensure-class-cache)
-      (let ((candidates '()))
+      (let ((candidates '()) (limit 100))
         (for-each
          (lambda (name)
-           (when (invoke (->string name) 'startsWith prefix)
+           (when (and (< (length candidates) limit)
+                      (invoke (->string name) 'startsWith prefix))
              (set! candidates (cons name candidates))))
          *class-cache*)
         (java.util.Collections:sort candidates)
