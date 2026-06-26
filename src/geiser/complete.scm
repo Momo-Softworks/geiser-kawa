@@ -9,14 +9,33 @@
           (geiser string-util)
           (geiser classpath))
   (begin
+    ;; Try to resolve a potentially unqualified class name.
+    (define (resolve-class name)
+      (let ((pkgs '("" "java.lang." "java.util." "java.io."
+                    "cpw.mods.fml.common."
+                    "cpw.mods.fml.common.registry."
+                    "net.minecraft.init."
+                    "net.minecraft.block."
+                    "net.minecraft.item."
+                    "net.minecraft.world."
+                    "net.minecraft.entity.")))
+        (let loop ((remaining pkgs))
+          (if (null? remaining)
+              #f
+              (guard (exn (else (loop (cdr remaining))))
+                (let ((full (string-append (car remaining) name)))
+                  (java.lang.Class:forName full)
+                  full))))))
+
     (define (complete-java-members prefix)
       (let* ((s (->string prefix))
              (colon-pos (str-last-index COLON s)))
         (if (< colon-pos 0)
             '()
-            (let ((class-name (invoke s 'substring 0 colon-pos))
-                  (member-prefix (invoke s 'substring (+ colon-pos 1)
-                                       (invoke s 'length))))
+            (let* ((raw-class (invoke s 'substring 0 colon-pos))
+                   (class-name (or (resolve-class raw-class) raw-class))
+                   (member-prefix (invoke s 'substring (+ colon-pos 1)
+                                        (invoke s 'length))))
               (guard (exn (else '()))
                 (let* ((cls :: java.lang.Class
                             (java.lang.Class:forName class-name))
@@ -32,7 +51,7 @@
                            (name :: String (invoke m 'getName)))
                       (when (str-starts-with? name member-prefix)
                         (set! candidates
-                              (cons (string-append class-name ":" name "("
+                              (cons (string-append raw-class ":" name "("
                                     (string-join
                                      (map (lambda (p :: java.lang.Class)
                                             (invoke p 'getSimpleName))
@@ -48,7 +67,7 @@
                            (name :: String (invoke f 'getName)))
                       (when (str-starts-with? name member-prefix)
                         (set! candidates
-                              (cons (string-append class-name ":" name)
+                              (cons (string-append raw-class ":" name)
                                     candidates)))))
                   candidates))))))
 
