@@ -8,26 +8,22 @@
       (display "((result \"\"))\n"))
 
     (define (geiser-eval module-name form)
-      ;; For Kawa 3.1.1, always use interaction-environment.
       (let ((env (interaction-environment)))
-        (let ((out-str (open-output-string)))
-          (let ((result
-                 (guard
-                  (exn (else
-                        (let ((err-str (open-output-string)))
-                          (display "ERROR: " err-str)
-                          (display exn err-str)
-                          (get-output-string err-str))))
-                  (let ((val (eval (read (open-input-string form)) env)))
-                    (write val out-str)
-                    (get-output-string out-str)))))
-            (display "((result ")
-            (write result)
-            (display ") (output . \"")
-            ;; Display result, escaping backslashes for Geiser sexp format.
-            ;; FIXME: proper backslash/quote escaping for Kawa 3.1.1 FString.
-            (display result)
-            (display "\"))\n")))))
+        (guard
+         (exn (else
+               (display "((result ")
+               (write "ERROR")
+               (display ") (output . \"\"))\n")))
+         (let* ((in (open-input-string form))
+                (expr (read in))
+                (val (eval expr env))
+                ;; Write value to string port for properly
+                ;; quoted result (mirrors geiser-guile).
+                (out (open-output-string)))
+           (write val out)
+           (display "((result ")
+           (write (get-output-string out))
+           (display ") (output . \"\"))\n")))))
 
     (define (geiser-load-file filepath)
       (load filepath)
