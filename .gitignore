@@ -1,0 +1,5 @@
+.cask/
+.mvn/
+target/
+*.elc
+*.class
