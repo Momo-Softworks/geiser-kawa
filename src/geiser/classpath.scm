@@ -5,7 +5,7 @@
     (define *class-cache* #f)
 
     (define (->string x) :: String
-      (invoke x 'toString))
+      (java.lang.String:new (invoke x 'toString)))
 
     (define (ensure-class-cache)
       (when (not *class-cache*)

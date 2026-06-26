@@ -4,18 +4,27 @@
           (kawa base)
           (geiser classpath))
   (begin
-    (define (->string x) :: String
-      (invoke x 'toString))
+    ;; Use integer char codes to avoid Kawa 3.1.1 #\: bug.
+    (define COLON (as int 58))
+    (define DOT   (as int 46))
+
+    (define (str-index ch str :: String) :: int
+      (invoke str 'indexOf ch))
+
+    (define (str-last-index ch str :: String) :: int
+      (invoke str 'lastIndexOf ch))
+
+    (define (str-starts-with? s :: String prefix :: String) :: boolean
+      (invoke s 'startsWith prefix))
 
     (define (java-interop-prefix? prefix)
       (let ((s (->string prefix)))
-        (or (>= (invoke s 'indexOf ":") 0)
-            (>= (invoke s 'indexOf ".") 0))))
+        (or (>= (str-index COLON s) 0)
+            (>= (str-index DOT s) 0))))
 
-    ;; Complete Java class members (methods, fields) via reflection.
     (define (complete-java-members prefix)
       (let* ((s (->string prefix))
-             (colon-pos (invoke s 'lastIndexOf ":")))
+             (colon-pos (str-last-index COLON s)))
         (if (< colon-pos 0)
             '()
             (let ((class-name (invoke s 'substring 0 colon-pos))
@@ -30,10 +39,11 @@
                                (cls:getFields))
                        (candidates '()))
                   (do ((i :: int 0 (+ i 1)))
-                      ((>= i (methods:length)))
-                    (let* ((m :: java.lang.reflect.Method (methods i))
+                      ((>= i (java.lang.reflect.Array:getLength methods)))
+                    (let* ((m :: java.lang.reflect.Method
+                              (java.lang.reflect.Array:get methods i))
                            (name :: String (m:getName)))
-                      (when (invoke name 'startsWith member-prefix)
+                      (when (str-starts-with? name member-prefix)
                         (set! candidates
                               (cons (string-append name "("
                                     (string-join
@@ -45,14 +55,14 @@
                                     ")")
                                     candidates)))))
                   (do ((i :: int 0 (+ i 1)))
-                      ((>= i (fields:length)))
-                    (let* ((f :: java.lang.reflect.Field (fields i))
+                      ((>= i (java.lang.reflect.Array:getLength fields)))
+                    (let* ((f :: java.lang.reflect.Field
+                              (java.lang.reflect.Array:get fields i))
                            (name :: String (f:getName)))
-                      (when (invoke name 'startsWith member-prefix)
+                      (when (str-starts-with? name member-prefix)
                         (set! candidates (cons name candidates)))))
                   candidates))))))
 
-    ;; Complete Scheme symbols.
     (define (complete-symbols prefix)
       (let* ((s (->string prefix))
              (env (interaction-environment))
@@ -64,7 +74,7 @@
               (when (and (iter:hasNext) (< (length candidates) limit))
                 (let* ((loc (iter:next))
                        (sym (invoke (invoke loc 'getKeySymbol) 'toString)))
-                  (when (invoke sym 'startsWith s)
+                  (when (str-starts-with? sym s)
                     (set! candidates (cons sym candidates))))
                 (loop)))))
         (java.util.Collections:sort candidates)
@@ -74,4 +84,5 @@
       (if (java-interop-prefix? prefix)
           (complete-java-members prefix)
           (append (complete-symbols prefix)
-                  (complete-classes prefix))))))
+                  (complete-classes prefix)))))
+    )
