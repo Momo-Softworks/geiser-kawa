@@ -50,7 +50,7 @@ Recommended to be set via .dir-locals.el in your project root."
     geiser-kawa-binary))
 
 (defvar geiser-kawa-scheme-dir
-  (expand-file-name "../src" (file-name-directory load-file-name))
+  (expand-file-name "src" (file-name-directory load-file-name))
   "Directory where the Kawa scheme geiser modules are installed.")
 
 (defun geiser-kawa--parameters ()
