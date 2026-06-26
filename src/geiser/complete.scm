@@ -4,18 +4,18 @@
           (kawa base)
           (geiser classpath))
   (begin
-    (define (java-interop-prefix? prefix)
-      (or (string-contains prefix ":")
-          (string-contains prefix ".")))
+    (define (java-interop-prefix? prefix :: String)
+      (or (>= (invoke prefix 'indexOf ":") 0)
+          (>= (invoke prefix 'indexOf ".") 0)))
 
     ;; Complete Java class members (methods, fields) via reflection.
-    (define (complete-java-members prefix)
-      (let ((colon-pos (string-index-right prefix #\:)))
-        (if (not colon-pos)
+    (define (complete-java-members prefix :: String)
+      (let ((colon-pos (invoke prefix 'lastIndexOf ":")))
+        (if (< colon-pos 0)
             '()
-            (let ((class-name (substring prefix 0 colon-pos))
-                  (member-prefix (substring prefix (+ colon-pos 1)
-                                           (string-length prefix))))
+            (let ((class-name (invoke prefix 'substring 0 colon-pos))
+                  (member-prefix (invoke prefix 'substring (+ colon-pos 1)
+                                       (invoke prefix 'length))))
               (guard (exn (else '()))
                 (let* ((cls :: java.lang.Class
                             (java.lang.Class:forName class-name))
@@ -28,7 +28,7 @@
                       ((>= i (methods:length)))
                     (let* ((m :: java.lang.reflect.Method (methods i))
                            (name :: String (m:getName)))
-                      (when (string-prefix? member-prefix name)
+                      (when (invoke name 'startsWith member-prefix)
                         (set! candidates
                               (cons (string-append name "("
                                     (string-join
@@ -43,7 +43,7 @@
                       ((>= i (fields:length)))
                     (let* ((f :: java.lang.reflect.Field (fields i))
                            (name :: String (f:getName)))
-                      (when (string-prefix? member-prefix name)
+                      (when (invoke name 'startsWith member-prefix)
                         (set! candidates (cons name candidates)))))
                   candidates))))))
 
@@ -58,7 +58,7 @@
               (when (and (iter:hasNext) (< (length candidates) limit))
                 (let* ((loc (iter:next))
                        (sym (invoke (invoke loc 'getKeySymbol) 'toString)))
-                  (when (string-prefix? prefix sym)
+                  (when (invoke sym 'startsWith prefix)
                     (set! candidates (cons sym candidates))))
                 (loop)))))
         (java.util.Collections:sort candidates)
