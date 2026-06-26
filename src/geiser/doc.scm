@@ -3,37 +3,37 @@
   (import (scheme write)
           (kawa base))
   (begin
-
     ;; Extract argument names and types from a procedure or macro.
     (define (procedure-signature proc)
       (guard (exn (else #f))
-        (let ((name (gnu.mapping.Procedure:getName proc)))
-          (if name
-              (let* ((params (gnu.mapping.Procedure:getParameters proc))
-                     (param-count (if (eq? params #!null) 0 (params:length)))
+        (let* ((p :: gnu.mapping.Procedure proc)
+               (name-obj (invoke p 'getName)))
+          (if name-obj
+              (let* ((name (invoke name-obj 'toString))
+                     (params-obj (invoke p 'getParameters))
+                     (param-count (if (eq? params-obj #!null)
+                                      0
+                                      (invoke params-obj 'length)))
                      (param-names '()))
-                ;; Try to get parameter names from the lambda list
-                (guard (exn (else (set! param-names '("..."))))
-                  (when (> param-count 0)
-                    (set! param-names
-                          (map (lambda (i) (string-append "arg" (number->string i)))
-                               (iota param-count)))))
-                (list (gnu.mapping.Symbol:toString name) param-names))
+                (do ((i :: int 0 (+ i 1)))
+                    ((>= i param-count))
+                  (set! param-names
+                        (cons (string-append "arg"
+                                             (number->string i))
+                              param-names)))
+                (list name (reverse param-names)))
               #f))))
 
     ;; Resolve a symbol and get its signature.
     (define (resolve-signature id)
       (guard (exn (else #f))
         (let* ((env (interaction-environment))
-               (sym (string->symbol id))
                (loc (env:getLocation id)))
           (if (eq? loc #!null)
-              ;; Not found in environment — try as Java class member
               (java-signature id)
               (let ((val (loc:get)))
                 (if (gnu.mapping.Procedure? val)
                     (procedure-signature val)
-                    ;; Just return the name with no args
                     (list id '())))))))
 
     ;; Try to resolve as Java method signature.
@@ -44,17 +44,22 @@
               (let* ((class-name (substring id 0 colon-pos))
                      (member-name (substring id (+ colon-pos 1)
                                             (string-length id)))
-                     (cls (java.lang.Class:forName class-name))
-                     (methods (cls:getMethods))
+                     (cls :: java.lang.Class
+                          (java.lang.Class:forName class-name))
+                     (methods :: java.lang.reflect.Method[]
+                              (cls:getMethods))
                      (sigs '()))
-                (do ((i 0 (+ i 1)))
+                (do ((i :: int 0 (+ i 1)))
                     ((>= i (methods:length)))
-                  (let ((m :: java.lang.reflect.Method (methods i)))
-                    (when (string=? member-name (m:getName))
+                  (let* ((m :: java.lang.reflect.Method (methods i))
+                         (m-name :: String (m:getName)))
+                    (when (string=? member-name m-name)
                       (set! sigs
                             (cons (list member-name
-                                        (map (lambda (p) (p:getSimpleName))
-                                             (vector->list (m:getParameterTypes))))
+                                        (map (lambda (p :: java.lang.Class)
+                                               (p:getSimpleName))
+                                             (vector->list
+                                              (m:getParameterTypes))))
                                   sigs)))))
                 (if (pair? sigs) (car sigs) #f)))
             #f)))
@@ -68,12 +73,8 @@
                                              id))))
              (when sig (set! results (cons sig results)))))
          (if (list? ids) ids (list ids)))
-        ;; Return results as a list — geiser extracts the return value.
-        ;; Format: (("name" ("arg1" "arg2" ...)) ...)
         (reverse results)))
 
     (define (geiser-object-signature name)
-      ;; Return signature as a single-element list.
       (let ((sig (resolve-signature name)))
         (if sig (list sig) '())))))
-

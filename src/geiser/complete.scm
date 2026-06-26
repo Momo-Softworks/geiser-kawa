@@ -3,9 +3,7 @@
   (import (scheme write)
           (kawa base))
   (begin
-
     ;; Check if a prefix looks like a Java interop call.
-    ;; Patterns: "java.lang.String:"  "obj:"  "ClassName:" 
     (define (java-interop-prefix? prefix)
       (or (string-contains prefix ":")
           (string-contains prefix ".")))
@@ -19,48 +17,45 @@
                   (member-prefix (substring prefix (+ colon-pos 1)
                                            (string-length prefix))))
               (guard (exn (else '()))
-                (let* ((cls (java.lang.Class:forName class-name))
-                       (methods (cls:getMethods))
-                       (fields  (cls:getFields))
+                (let* ((cls :: java.lang.Class
+                            (java.lang.Class:forName class-name))
+                       (methods :: java.lang.reflect.Method[]
+                                (cls:getMethods))
+                       (fields :: java.lang.reflect.Field[]
+                               (cls:getFields))
                        (candidates '()))
-                  ;; Collect matching method names (with type signatures)
-                  (do ((i 0 (+ i 1)))
+                  (do ((i :: int 0 (+ i 1)))
                       ((>= i (methods:length)))
                     (let* ((m :: java.lang.reflect.Method (methods i))
-                           (name :: gnu.lists.FString (m:getName)))
+                           (name :: String (m:getName)))
                       (when (string-prefix? member-prefix name)
                         (set! candidates
                               (cons (string-append name "("
                                     (string-join
-                                     (map (lambda (p) (p:getSimpleName))
-                                          (vector->list (m:getParameterTypes)))
+                                     (map (lambda (p :: java.lang.Class)
+                                            (p:getSimpleName))
+                                          (vector->list
+                                           (m:getParameterTypes)))
                                      ", ")
                                     ")")
                                     candidates)))))
-                  ;; Collect matching field names
-                  (do ((i 0 (+ i 1)))
+                  (do ((i :: int 0 (+ i 1)))
                       ((>= i (fields:length)))
                     (let* ((f :: java.lang.reflect.Field (fields i))
-                           (name :: gnu.lists.FString (f:getName)))
+                           (name :: String (f:getName)))
                       (when (string-prefix? member-prefix name)
                         (set! candidates (cons name candidates)))))
                   candidates)))
-            ;; No colon — try package/class completion
             (guard (exn (else '()))
-              ;; Try as a package name
               (let ((pkg (java.lang.Package:getPackage prefix)))
                 (if (not (eq? pkg #!null))
                     '()
-                    ;; Try as partial class name — look in common packages
                     (complete-symbols prefix))))))))
 
     ;; Complete Scheme symbols from the interaction environment.
     (define (complete-symbols prefix)
       (let* ((env (interaction-environment))
              (candidates '()))
-        ;; Iterate over known symbols.
-        ;; Kawa doesn't have a direct "list all symbols" function,
-        ;; so we use the environment's defineLocation enumerator.
         (guard (exn (else '()))
           (let ((iter (env:enumerateAllLocations)))
             (let loop ()
@@ -74,7 +69,7 @@
         candidates))
 
     (define (geiser-completions prefix)
-      ;; Return completions as a list — geiser extracts the return value.
       (if (java-interop-prefix? prefix)
           (complete-java prefix)
-          (complete-symbols prefix))))
+          (complete-symbols prefix)))
+    )
