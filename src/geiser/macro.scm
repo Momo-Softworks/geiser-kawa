@@ -6,14 +6,15 @@
 
     ;; Expand a Scheme macro form without evaluating it.
     (define (geiser-macroexpand form . rest)
-      (guard (exn (else (display "((result \"\" (output . \"ERROR\")))\n")))
+      (guard (exn (else "ERROR"))
         (let* ((env (interaction-environment))
                (expr (if (string? form)
                          (read (open-input-string form))
                          form))
-               (expanded (gnu.mapping.Procedure:apply
-                          (gnu.mapping.Environment:get 'macroexpand env)
-                          expr)))
-          (display "((result \"")
-          (display (call-with-output-string (lambda () (write expanded))))
-          (display "\"))\n"))))))
+               ;; In Kawa 3.1.1, macroexpand is accessed via interaction env.
+               (expander (gnu.mapping.Environment:get 'macroexpand env))
+               (expanded (if (gnu.mapping.Procedure? expander)
+                             (expander expr)
+                             expr)))
+          ;; Return expanded form as its written representation.
+          (call-with-output-string (lambda () (write expanded))))))))

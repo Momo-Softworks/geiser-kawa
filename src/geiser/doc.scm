@@ -68,25 +68,12 @@
                                              id))))
              (when sig (set! results (cons sig results)))))
          (if (list? ids) ids (list ids)))
-        ;; Format as Geiser expects: (("name" ("arg1" "arg2" ...)) ...)
-        (display (format-autodoc-results (reverse results)))
-        (newline)))
-
-    (define (format-autodoc-results results)
-      (string-append "("
-        (string-join
-         (map (lambda (r)
-                (string-append "(\"" (car r) "\" ("
-                  (string-join (map (lambda (a) (string-append "\"" a "\""))
-                                    (cadr r))
-                               " ")
-                  "))"))
-              results)
-         " ")
-        ")"))
+        ;; Return results as a list — geiser extracts the return value.
+        ;; Format: (("name" ("arg1" "arg2" ...)) ...)
+        (reverse results)))
 
     (define (geiser-object-signature name)
-      (display (format-autodoc-results
-                (let ((sig (resolve-signature name)))
-                  (if sig (list sig) '()))))
-      (newline))))
+      ;; Return signature as a single-element list.
+      (let ((sig (resolve-signature name)))
+        (if sig (list sig) '())))))
+

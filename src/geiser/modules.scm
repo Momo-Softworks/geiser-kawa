@@ -23,16 +23,13 @@
                     (set! candidates (cons sym candidates))))
                 (loop)))))
         (java.util.Collections:sort candidates)
-        (display (string-append "("
-                 (string-join (map (lambda (s) (string-append "\"" s "\""))
-                                   candidates)
-                              " ")
-                 ")\n"))))
+        ;; Return candidates list directly — geiser extracts the return value.
+        candidates))
 
     ;; Return exported symbols for a given module name.
     (define (geiser-module-exports module-name)
       (let ((exports '()))
-        (guard (exn (else (display "()\n")))
+        (guard (exn (else '()))
           (let* ((env (interaction-environment))
                  (iter (env:enumerateAllLocations)))
             (let loop ()
@@ -49,10 +46,7 @@
                                sym)))
                       (set! exports (cons bare-name exports)))))
                 (loop))))
+          ;; Return exports list — geiser extracts the return value.
           (java.util.Collections:sort exports)
-          (display (string-append "("
-                   (string-join (map (lambda (s) (string-append "\"" s "\""))
-                                     exports)
-                                " ")
-                   ")\n"))))))
+          exports))))
 )

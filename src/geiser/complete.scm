@@ -74,12 +74,7 @@
         candidates))
 
     (define (geiser-completions prefix)
-      (let ((candidates
-             (if (java-interop-prefix? prefix)
-                 (complete-java prefix)
-                 (complete-symbols prefix))))
-        (display (string-append "("
-                 (string-join (map (lambda (s) (string-append "\"" s "\""))
-                                   candidates)
-                              " ")
-                 ")\n")))))
+      ;; Return completions as a list — geiser extracts the return value.
+      (if (java-interop-prefix? prefix)
+          (complete-java prefix)
+          (complete-symbols prefix))))
