@@ -90,6 +90,9 @@
 (let ((c (complete-classes "kawa.repl")))
   (assert-true "complete kawa.repl" (> (length c) 0)))
 
+(let ((c (geiser-completions "kawa.")))
+  (assert-true "dotted class prefix uses class completion" (> (length c) 0)))
+
 ;; ================ geiser-completions (combined) ================
 (display "--- geiser-completions ---\n")
 (let ((c (geiser-completions "disp")))
@@ -97,6 +100,27 @@
 
 (let ((c (geiser-completions "java.lang.String:valu")))
   (assert-true "combined Java member" (> (length c) 0)))
+
+;; ================ annotations ================
+(display "--- annotations ---\n")
+(assert-equal "class annotation"
+              " class" (geiser-completion-annotation "java.lang.String"))
+(assert-equal "static method annotation"
+              " static method"
+              (geiser-completion-annotation "java.lang.String:valueOf(Object)"))
+(assert-equal "instance method annotation"
+              " method"
+              (geiser-completion-annotation "java.lang.String:length()"))
+(let* ((candidates (complete-java-members "java.lang.Integer:MAX"))
+       (candidate (car candidates)))
+  (assert-equal "cached static field annotation"
+                " static field"
+                (geiser-completion-annotation candidate)))
+(let* ((candidates (complete-java-members "java.lang.String:charAt"))
+       (candidate (car candidates)))
+  (assert-equal "cached method annotation"
+                " method"
+                (geiser-completion-annotation candidate)))
 
 ;; ================ autodoc ================
 (display "--- autodoc ---\n")
@@ -107,6 +131,23 @@
 (display "--- location ---\n")
 (let ((loc (geiser-symbol-location "java.lang.String")))
   (assert-equal "no source for String" #f loc))
+
+(let ((roots (source-roots)))
+  (assert-true "source-roots returns list" (list? roots)))
+
+;; ================ class cache management ================
+(display "--- class cache management ---\n")
+(ensure-class-cache)
+(let ((stats (geiser-class-cache-stats)))
+  (assert-true "class-cache-stats is list" (list? stats))
+  (assert-true "class-count > 0"
+               (let ((entry (assoc "class-count" stats)))
+                 (and entry (> (cdr entry) 0)))))
+
+(let* ((before (cdr (assoc "class-count" (geiser-class-cache-stats))))
+       (refresh-stats (geiser-refresh-class-cache))
+       (after (cdr (assoc "class-count" refresh-stats))))
+  (assert-equal "refresh preserves count" before after))
 
 ;; ================ geiser protocol simulation ================
 (display "--- protocol simulation ---\n")

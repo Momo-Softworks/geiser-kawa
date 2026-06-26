@@ -1,14 +1,18 @@
 (define-library (geiser classpath)
   (export ensure-class-cache complete-classes *class-cache*
+          geiser-refresh-class-cache geiser-class-cache-stats
           scan-dir scan-zip)
   (import (kawa base)
           (geiser string-util))
   (begin
     (define *class-cache* #f)
+    (define *class-cache-stats* '())
 
     (define (ensure-class-cache)
       (when (not *class-cache*)
-        (let ((names '()))
+        (let ((names '())
+              (jar-count 0)
+              (dir-count 0))
           (let* ((cp (java.lang.System:getProperty "java.class.path"))
                  (sep (java.lang.System:getProperty "path.separator")))
             (when cp
@@ -20,13 +24,34 @@
                                  (java.lang.reflect.Array:get parts i)))
                       (guard (exn (else #f))
                         (let ((f :: java.io.File (java.io.File entry)))
-                          (set! names
-                                (if (invoke f 'isDirectory)
-                                    (scan-dir f "" names)
-                                    (if (invoke entry 'endsWith ".jar")
-                                        (scan-zip entry names)
-                                        names)))))))))))
-          (set! *class-cache* names))))
+                          (if (invoke f 'isDirectory)
+                              (begin
+                                (set! dir-count (+ dir-count 1))
+                                (set! names (scan-dir f "" names)))
+                              (if (invoke entry 'endsWith ".jar")
+                                  (begin
+                                    (set! jar-count (+ jar-count 1))
+                                    (set! names (scan-zip entry names)))
+                                  (set! names names)))))))))))
+          (set! *class-cache* names)
+          (set! *class-cache-stats*
+                (list (cons "class-count" (length names))
+                      (cons "jars-scanned" jar-count)
+                      (cons "dirs-scanned" dir-count))))))
+
+    (define (geiser-refresh-class-cache)
+      "Rescan the classpath and rebuild the class name cache.
+Returns an alist with updated stats."
+      (set! *class-cache* #f)
+      (set! *class-cache-stats* '())
+      (ensure-class-cache)
+      *class-cache-stats*)
+
+    (define (geiser-class-cache-stats)
+      "Return an alist describing the current class cache state.
+Keys: class-count, jars-scanned, dirs-scanned."
+      (ensure-class-cache)
+      *class-cache-stats*)
 
     (define (scan-dir dir :: java.io.File rel :: String names)
       (let ((files :: java.io.File[] (invoke dir 'listFiles)))
@@ -83,31 +108,35 @@
                       (loop acc)))
                 (begin (invoke jf 'close) acc))))))
 
+    (define (take-n xs n)
+      (if (or (<= n 0) (null? xs))
+          '()
+          (cons (car xs) (take-n (cdr xs) (- n 1)))))
+
     (define (complete-classes prefix)
       (ensure-class-cache)
-      (let ((candidates '()) (limit 100))
+      (let ((candidates '()) (limit 1000))
         (for-each
          (lambda (name)
-           (when (< (length candidates) limit)
-             (let ((sname (->string name)))
-               (when (invoke sname 'startsWith prefix)
-                 (set! candidates (cons name candidates)))
-               ;; Also match unqualified name (after last dot).
-               (let ((dot (invoke sname 'lastIndexOf ".")))
-                 (when (and (> dot -1)
-                            (invoke sname 'substring (+ dot 1))
-                            (invoke
-                             (invoke sname 'substring (+ dot 1))
-                             'startsWith prefix))
-                   (set! candidates
-                         (cons (invoke sname 'substring (+ dot 1))
-                               candidates)))))))
+           (let ((sname (->string name)))
+             (when (invoke sname 'startsWith prefix)
+               (set! candidates (cons name candidates)))
+             ;; Also match unqualified name (after last dot).
+             (let ((dot (invoke sname 'lastIndexOf ".")))
+               (when (and (> dot -1)
+                          (invoke sname 'substring (+ dot 1))
+                          (invoke
+                           (invoke sname 'substring (+ dot 1))
+                           'startsWith prefix))
+                 (set! candidates
+                       (cons (invoke sname 'substring (+ dot 1))
+                             candidates))))))
          *class-cache*)
         (java.util.Collections:sort candidates)
         ;; Deduplicate manually (Kawa 3.1.1 has no delete-duplicates).
         (let dedup ((in candidates) (out '()))
           (if (null? in)
-              (reverse out)
+              (take-n (reverse out) limit)
               (dedup (cdr in)
                      (if (and (pair? out) (string=? (car in) (car out)))
                          out

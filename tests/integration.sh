@@ -1,8 +1,9 @@
-#!/bin/bash
+#!/usr/bin/env bash
 # Integration test: pipes exact geiser protocol expressions to Kawa.
 set -e
 
-SRC="/home/swilley/Projects/geiser-kawa/src"
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+SRC="$(cd "$SCRIPT_DIR/../src" && pwd)"
 PASS=0
 FAIL=0
 

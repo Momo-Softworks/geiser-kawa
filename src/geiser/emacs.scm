@@ -3,6 +3,7 @@
           geiser-load-file
           geiser-no-values
           geiser-completions
+          geiser-completion-annotation
           geiser-module-completions
           geiser-autodoc
           geiser-object-signature
@@ -10,6 +11,9 @@
           geiser-module-exports
           geiser-symbol-location
           geiser-module-location
+          ;; Cache management
+          geiser-refresh-class-cache
+          geiser-class-cache-stats
           ;; Re-export string-util for testing
           ->string str-index str-last-index str-starts-with?
           java-interop-prefix? COLON DOT
@@ -17,7 +21,9 @@
           complete-java-members complete-symbols complete-classes
           ;; Re-export classpath internals for testing
           ensure-class-cache *class-cache*
-          scan-dir scan-zip)
+          scan-dir scan-zip
+          ;; Re-export location internals for testing
+          source-roots)
   (import (scheme base)
           (geiser eval)
           (geiser string-util)
